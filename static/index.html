@@ -1,11 +1,119 @@
-<!doctype html>
-<html>
-<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Psych Scheduler SaaS</title>
-<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:24px}</style>
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Psych Scheduler Giriş</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #f6f7fb;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    .container {
+      background: #fff;
+      padding: 2rem 3rem;
+      border-radius: 12px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    h2 {
+      color: #333;
+      margin-bottom: 1.5rem;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      background: #4a6cf7;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover { background: #3956d7; }
+    .toggle {
+      margin-top: 15px;
+      color: #666;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .message {
+      margin-top: 1rem;
+      color: #007a00;
+      font-weight: 500;
+    }
+  </style>
 </head>
 <body>
-<h1>Psych Scheduler SaaS</h1>
-<p>Bu bir demo panelidir. /api ile çalışır. <code>/health</code> son noktasını kontrol edebilirsiniz.</p>
+  <div class="container">
+    <h2 id="form-title">Kayıt Ol</h2>
+    <input type="email" id="email" placeholder="E-posta" />
+    <input type="password" id="password" placeholder="Şifre" />
+    <input type="text" id="clinic" placeholder="Klinik Adı" />
+    <button id="submit-btn">Kayıt Ol</button>
+    <div class="toggle" onclick="toggleForm()">Zaten hesabın var mı? Giriş yap</div>
+    <div class="message" id="message"></div>
+  </div>
+
+  <script>
+    let isLogin = false;
+    const apiBase = window.location.origin + "/api/auth";
+
+    function toggleForm() {
+      isLogin = !isLogin;
+      document.getElementById("form-title").innerText = isLogin ? "Giriş Yap" : "Kayıt Ol";
+      document.getElementById("submit-btn").innerText = isLogin ? "Giriş Yap" : "Kayıt Ol";
+      document.getElementById("clinic").style.display = isLogin ? "none" : "block";
+      document.getElementById("message").innerText = "";
+    }
+
+    async function sendForm() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const clinic = document.getElementById("clinic").value;
+      const endpoint = isLogin ? "/login" : "/signup";
+      const payload = isLogin ? { email, password } : { email, password, clinic };
+
+      try {
+        const res = await fetch(apiBase + endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (!isLogin) {
+            document.getElementById("message").innerText = 
+              "✅ Kayıt başarılı! Tenant key: " + data.tenant_key;
+          } else {
+            document.getElementById("message").innerText = 
+              "🔐 Giriş başarılı!";
+          }
+        } else {
+          document.getElementById("message").innerText = 
+            "❌ Hata: " + (data.detail || "İşlem başarısız");
+        }
+      } catch (err) {
+        document.getElementById("message").innerText = "Bağlantı hatası.";
+      }
+    }
+
+    document.getElementById("submit-btn").addEventListener("click", sendForm);
+  </script>
 </body>
 </html>
