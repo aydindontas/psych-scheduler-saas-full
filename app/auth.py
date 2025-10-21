@@ -1,13 +1,19 @@
 from datetime import datetime, timedelta, timezone
 from jose import jwt
-from passlib.hash import bcrypt, bcrypt_sha256
+from passlib.hash import pbkdf2_sha256, bcrypt, bcrypt_sha256  # bcrypt* sadece geriye dönük uyumluluk için
 
-# Şifreleme: bcrypt_sha256 (72 bayt sınırını aşmak için)
+# Ana şifre şeması: PBKDF2-SHA256  (bcrypt'e bağımlılık yok, 72 byte sınırı yok)
 def hash_password(p: str) -> str:
-    return bcrypt_sha256.hash(p)
+    # rounds = 29000 default; istersen 200k+ yapabilirsin
+    return pbkdf2_sha256.hash(p)
 
 def verify_password(p: str, h: str) -> bool:
-    # Eski hash'ler için geriye dönük uyumluluk: önce bcrypt_sha256 dene, olmazsa bcrypt dene
+    # 1) yeni şema
+    try:
+        return pbkdf2_sha256.verify(p, h)
+    except Exception:
+        pass
+    # 2) eski olası hash'ler için geriye dönük uyumluluk
     try:
         return bcrypt_sha256.verify(p, h)
     except Exception:
@@ -24,3 +30,4 @@ def create_access_token(subject: str, secret: str, minutes: int) -> str:
         "exp": int((now + timedelta(minutes=minutes)).timestamp()),
     }
     return jwt.encode(payload, secret, algorithm="HS256")
+
