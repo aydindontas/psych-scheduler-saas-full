@@ -18,16 +18,7 @@ app = FastAPI(title="Psych Scheduler SaaS")
 init_db()
 
 if os.path.isdir("static"):
-from fastapi.responses import FileResponse
-
-# Statik dosyaları /static altında sun
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Ana sayfa: static/index.html
-@app.get("/", response_class=HTMLResponse)
-def root():
-    return FileResponse("static/index.html")
-
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 def tznow(): return datetime.now(timezone.utc)
 
