@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Giriş Yap | Psych Scheduler SaaS</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h2>Giriş Yap</h2>
+    <input id="email" type="email" placeholder="E-posta" required />
+    <input id="password" type="password" placeholder="Şifre" required />
+    <button id="loginBtn">Giriş Yap</button>
+    <p>Hesabın yok mu? <a href="/static/index.html">Kayıt Ol</a></p>
+    <p id="status"></p>
+  </div>
+
+  <script>
+    document.getElementById("loginBtn").addEventListener("click", async () => {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const status = document.getElementById("status");
+
+      try {
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.detail || "Giriş başarısız");
+        }
+
+        const data = await response.json();
+        status.style.color = "green";
+        status.textContent = "✅ Giriş başarılı!";
+        localStorage.setItem("token", data.access_token);
+
+        setTimeout(() => {
+          window.location.href = "/static/dashboard.html";
+        }, 1000);
+      } catch (err) {
+        status.style.color = "red";
+        status.textContent = "❌ " + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
