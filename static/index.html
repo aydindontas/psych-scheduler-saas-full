@@ -70,50 +70,48 @@
     <div class="message" id="message"></div>
   </div>
 
-  <script>
-    let isLogin = false;
-    const apiBase = window.location.origin + "/api/auth";
+<script>
+  let isLogin = false;
+  const apiBase = window.location.origin + "/api/auth";
 
-    function toggleForm() {
-      isLogin = !isLogin;
-      document.getElementById("form-title").innerText = isLogin ? "Giriş Yap" : "Kayıt Ol";
-      document.getElementById("submit-btn").innerText = isLogin ? "Giriş Yap" : "Kayıt Ol";
-      document.getElementById("clinic").style.display = isLogin ? "none" : "block";
-      document.getElementById("message").innerText = "";
-    }
+  function toggleForm() {
+    isLogin = !isLogin;
+    document.getElementById("form-title").innerText = isLogin ? "Giriş Yap" : "Kayıt Ol";
+    document.getElementById("submit-btn").innerText = isLogin ? "Giriş Yap" : "Kayıt Ol";
+    document.getElementById("clinic").style.display = isLogin ? "none" : "block";
+    document.getElementById("message").innerText = "";
+  }
 
-    async function sendForm() {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      const clinic = document.getElementById("clinic").value;
-      const endpoint = isLogin ? "/login" : "/signup";
-      const payload = isLogin ? { email, password } : { email, password, clinic };
+  async function sendForm() {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value.trim();
+    const clinic = document.getElementById("clinic").value.trim();
+    const endpoint = isLogin ? "/login" : "/signup";
+    const payload = isLogin ? { email, password } : { email, password, clinic };
+    const msg = document.getElementById("message");
 
-      try {
-        const res = await fetch(apiBase + endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (res.ok) {
-          if (!isLogin) {
-            document.getElementById("message").innerText = 
-              "✅ Kayıt başarılı! Tenant key: " + data.tenant_key;
-          } else {
-            document.getElementById("message").innerText = 
-              "🔐 Giriş başarılı!";
-          }
-        } else {
-          document.getElementById("message").innerText = 
-            "❌ Hata: " + (data.detail || "İşlem başarısız");
-        }
-      } catch (err) {
-        document.getElementById("message").innerText = "Bağlantı hatası.";
+    try {
+      const res = await fetch(apiBase + endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const text = await res.text();
+      let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+
+      if (res.ok) {
+        msg.innerText = isLogin ? "🔐 Giriş başarılı!" : ("✅ Kayıt başarılı! Tenant key: " + (data.tenant_key || "(yok)"));
+      } else {
+        msg.innerText = "❌ Hata: " + (data.detail || data.message || data.raw || (res.status + " " + res.statusText));
       }
+    } catch (err) {
+      msg.innerText = "Bağlantı hatası: " + (err && err.message ? err.message : "");
+      console.error("Signup error:", err);
     }
+  }
 
-    document.getElementById("submit-btn").addEventListener("click", sendForm);
-  </script>
+  document.getElementById("submit-btn").addEventListener("click", sendForm);
+</script>
 </body>
 </html>
