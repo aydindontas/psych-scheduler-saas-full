@@ -73,12 +73,13 @@ def health():
 # ----------------- Auth APIs -----------------
 @app.post("/api/auth/signup")
 async def signup(req: Request, session: Session = Depends(get_session)):
-    if len(password) < 6:
-        raise HTTPException(status_code=400, detail="Şifre en az 6 karakter olmalı")
-    data = await req.json()
+    data = await req.json()                           # 1) önce istek gövdesini al
     email = data["email"].strip().lower()
     password = data["password"]
     name = data.get("clinic", "Klinik")
+
+    if len(password) < 6:                             # 2) sonra kontrol et
+        raise HTTPException(status_code=400, detail="Şifre en az 6 karakter olmalı")
 
     tenant = Tenant(name=name, tenant_key=secrets.token_urlsafe(6))
     session.add(tenant); session.commit(); session.refresh(tenant)
@@ -89,7 +90,7 @@ async def signup(req: Request, session: Session = Depends(get_session)):
     token = create_access_token(subject=str(u.id), secret=settings.jwt_secret, minutes=settings.jwt_expire_minutes)
     reschedule_all(session)
     return {"access_token": token, "tenant_key": tenant.tenant_key}
-
+    
 @app.post("/api/auth/login")
 async def login(req: Request, session: Session = Depends(get_session)):
     data = await req.json()
