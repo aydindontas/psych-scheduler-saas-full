@@ -73,6 +73,8 @@ def health():
 # ----------------- Auth APIs -----------------
 @app.post("/api/auth/signup")
 async def signup(req: Request, session: Session = Depends(get_session)):
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Şifre en az 6 karakter olmalı")
     data = await req.json()
     email = data["email"].strip().lower()
     password = data["password"]
