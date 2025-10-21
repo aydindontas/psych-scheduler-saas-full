@@ -16,41 +16,52 @@
     <p id="status"></p>
   </div>
 
-  <script>
-    document.getElementById("loginBtn").addEventListener("click", async () => {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-      const status = document.getElementById("status");
+ <script>
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  const email = document.getElementById("email").value.trim().toLowerCase();
+  const password = document.getElementById("password").value;
+  const status = document.getElementById("status");
+  const base = window.location.origin; // https://psych-scheduler-saas-full.onrender.com
 
-      try {
-        const response = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
+  status.style.color = "#333";
+  status.textContent = "Gönderiliyor...";
 
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.detail || "Giriş başarısız");
-        }
+  try {
+    const resp = await fetch(`${base}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
 
-            const data = await response.json();
+    // Önce düz metin olarak al
+    const raw = await resp.text();
+    let data;
+    try {
+      data = JSON.parse(raw);           // JSON ise parse et
+    } catch (e) {
+      // JSON değilse (HTML vs.) anlamlı hata ver
+      throw new Error(`Sunucudan beklenmeyen yanıt: ${raw.slice(0,120)}... (HTTP ${resp.status})`);
+    }
+
+    if (!resp.ok) {
+      throw new Error(data?.detail || `Giriş başarısız (HTTP ${resp.status})`);
+    }
+
+    // Başarılı: token + tenant_key sakla, panele geç
+    localStorage.setItem("token", data.access_token);
+    localStorage.setItem("tenant_key", data.tenant_key);
+
     status.style.color = "green";
     status.textContent = "✅ Giriş başarılı!";
-
-    // 🔹 token + tenant key'i sakla
-    localStorage.setItem("token", data.access_token);
-    localStorage.setItem("tenant_key", data.tenant_key);   // <<< EKLENDİ
-
-    // 🔹 panele yönlendir
     setTimeout(() => {
       window.location.href = "/static/dashboard.html";
     }, 800);
-      } catch (err) {
-        status.style.color = "red";
-        status.textContent = "❌ " + err.message;
-      }
-    });
-  </script>
+
+  } catch (err) {
+    status.style.color = "red";
+    status.textContent = "❌ " + (err.message || "Bilinmeyen hata");
+  }
+});
+</script>
 </body>
 </html>
