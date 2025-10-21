@@ -34,14 +34,18 @@
           throw new Error(err.detail || "Giriş başarısız");
         }
 
-        const data = await response.json();
-        status.style.color = "green";
-        status.textContent = "✅ Giriş başarılı!";
-        localStorage.setItem("token", data.access_token);
+            const data = await response.json();
+    status.style.color = "green";
+    status.textContent = "✅ Giriş başarılı!";
 
-        setTimeout(() => {
-          window.location.href = "/static/dashboard.html";
-        }, 1000);
+    // 🔹 token + tenant key'i sakla
+    localStorage.setItem("token", data.access_token);
+    localStorage.setItem("tenant_key", data.tenant_key);   // <<< EKLENDİ
+
+    // 🔹 panele yönlendir
+    setTimeout(() => {
+      window.location.href = "/static/dashboard.html";
+    }, 800);
       } catch (err) {
         status.style.color = "red";
         status.textContent = "❌ " + err.message;
