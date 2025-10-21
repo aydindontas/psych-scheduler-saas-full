@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Randevu Planla</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <style>
+    body{font-family: "Segoe UI",sans-serif;background:#f6f7fb;margin:0;padding:24px}
+    .card{max-width:760px;margin:0 auto;background:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.06);padding:22px}
+    h1{margin:0 0 14px}
+    .grid{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+    .grid-1{grid-template-columns:1fr}
+    label{font-size:12px;color:#555;margin-bottom:6px;display:block}
+    input,select,textarea{width:100%;padding:10px 12px;border:1px solid #e2e6ef;border-radius:10px;font-size:14px;background:#fbfcff}
+    textarea{min-height:90px;resize:vertical}
+    .row{display:flex;gap:10px}
+    .btn{background:#4c6ef5;color:#fff;border:0;border-radius:10px;padding:12px 16px;font-weight:600;cursor:pointer}
+    .btn.secondary{background:#edf1ff;color:#335}
+    .muted{color:#667}
+    .ok{color:#2f9e44}
+    .err{color:#d63939}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="topbar">
+      <h1>🗓️ Randevu Planla</h1>
+      <div>
+        <a class="btn secondary" href="/static/dashboard.html">← Panele dön</a>
+      </div>
+    </div>
+
+    <p class="muted">Bu form ile yeni seans ekleyebilirsin. Çakışan saatler sistem tarafından engellenir.</p>
+
+    <div class="grid">
+      <div>
+        <label>Danışan Adı</label>
+        <input id="client_name" placeholder="Örn: Ayşe Yılmaz" />
+      </div>
+      <div>
+        <label>Telefon</label>
+        <input id="phone" placeholder="+90 5xx xxx xx xx" />
+      </div>
+
+      <div>
+        <label>Tarih</label>
+        <input id="date" type="date" />
+      </div>
+      <div>
+        <label>Saat</label>
+        <input id="time" type="time" />
+      </div>
+
+      <div>
+        <label>Süre (dakika)</label>
+        <input id="duration" type="number" value="60" min="15" step="15" />
+      </div>
+      <div>
+        <label>Görüşme Türü</label>
+        <select id="channel">
+          <option value="online">Online (Zoom)</option>
+          <option value="office">Ofis</option>
+        </select>
+      </div>
+
+      <div class="grid-1">
+        <label>Not</label>
+        <textarea id="notes" placeholder="İsteğe bağlı"></textarea>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button id="btnSave" class="btn">Kaydet</button>
+      <button id="btnClear" class="btn secondary" type="button">Temizle</button>
+      <span id="status" class="muted" style="align-self:center;margin-left:8px"></span>
+    </div>
+  </div>
+
+  <script>
+    // token/tenant kontrolü
+    const token = localStorage.getItem("token");
+    if(!token){
+      alert("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
+      window.location.href = "/static/Login.html";
+    }
+
+    const Q = id => document.getElementById(id);
+    Q("btnClear").onclick = () => {
+      ["client_name","phone","notes"].forEach(id => Q(id).value="");
+    };
+
+    Q("btnSave").onclick = async () => {
+      const status = Q("status");
+      status.className = "muted";
+      status.textContent = "Gönderiliyor...";
+
+      const date = Q("date").value;
+      const time = Q("time").value;
+
+      try{
+        if(!date || !time) throw new Error("Tarih ve saat zorunlu.");
+
+        const starts_at = new Date(`${date}T${time}:00`);
+        const payload = {
+          client_name: Q("client_name").value.trim(),
+          phone: Q("phone").value.trim(),
+          starts_at: starts_at.toISOString(),
+          duration: Number(Q("duration").value || 60),
+          channel: Q("channel").value,
+          notes: Q("notes").value.trim()
+        };
+
+        const resp = await fetch(`${window.location.origin}/api/appointments`,{
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const raw = await resp.text();
+        let data;
+        try{ data = JSON.parse(raw); }catch{ throw new Error(raw.slice(0,120)); }
+
+        if(!resp.ok){
+          throw new Error(data?.detail || `Hata: ${resp.status}`);
+        }
+
+        status.className = "ok";
+        status.textContent = "✅ Randevu kaydedildi.";
+        setTimeout(()=> window.location.href="/static/dashboard.html", 900);
+
+      }catch(err){
+        status.className = "err";
+        status.textContent = "❌ " + (err.message || "Bilinmeyen hata");
+      }
+    };
+
+    // varsayılanları doldur
+    (function preset(){
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,"0");
+      const dd = String(d.getDate()).padStart(2,"0");
+      const hh = String(d.getHours()+1).padStart(2,"0");
+      Q("date").value = `${yyyy}-${mm}-${dd}`;
+      Q("time").value = `${hh}:00`;
+    })();
+  </script>
+</body>
+</html>
