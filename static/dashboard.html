@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Panel | Psych Scheduler</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,sans-serif;background:#f6f7fb;margin:0}
+    .wrap{max-width:900px;margin:40px auto;padding:24px;background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
+    h1{font-size:22px;margin:0 0 6px}
+    .muted{color:#666;margin:0 0 18px}
+    .row{display:grid;grid-template-columns:1fr 1fr; gap:14px}
+    .card{border:1px solid #eee;border-radius:14px;padding:16px}
+    code,pre{background:#f2f3f7;border-radius:8px;padding:6px 8px;display:inline-block;overflow:auto}
+    button{background:#4f6ef7;color:#fff;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
+    .danger{background:#ef4444}
+    .copy{margin-left:8px;background:#0ea5e9}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>👋 Hoş geldin</h1>
+    <p class="muted">Giriş yaptın. Aşağıda entegrasyon bağlantıların ve hızlı aksiyonlar var.</p>
+
+    <div class="card">
+      <div><b>Tenant Key:</b> <code id="tenantKey"></code></div>
+      <div style="margin-top:6px;"><b>API Base:</b> <code id="apiBase"></code></div>
+    </div>
+
+    <h2>🔗 Webhook & Zoom</h2>
+    <div class="row">
+      <div class="card">
+        <b>WhatsApp Webhook URL</b>
+        <div style="margin-top:6px">
+          <code id="whUrl"></code>
+          <button class="copy" onclick="copy('whUrl')">Kopyala</button>
+        </div>
+        <div style="margin-top:10px">
+          <b>Verify Token:</b> <code id="verifyToken">ENV: VERIFY_TOKEN</code>
+          <div class="muted" style="margin-top:6px">Meta’da webhook kurarken bu token’ı gir.</div>
+        </div>
+      </div>
+      <div class="card">
+        <b>Zoom Toplantı Linki</b>
+        <div style="margin-top:6px">
+          <code id="zoomUrl">ENV: ZOOM_MEETING_URL</code>
+        </div>
+        <div class="muted" style="margin-top:6px">Hatırlatma mesajlarında bu link otomatik eklenir.</div>
+      </div>
+    </div>
+
+    <h2>🧪 Token ile test</h2>
+    <div class="card">
+      <div>Bearer token’ını otomatik ekleyerek test edebilmen için cURL:</div>
+      <pre id="curlBox"></pre>
+      <button onclick="copy('curlBox')" class="copy">Kopyala</button>
+    </div>
+
+    <div style="margin-top:16px;display:flex;gap:10px">
+      <button onclick="goSchedule()">Randevu Planla (yakında)</button>
+      <button class="danger" onclick="logout()">Çıkış Yap</button>
+    </div>
+  </div>
+
+<script>
+  // Guard: login yoksa geri gönder
+  const token = localStorage.getItem('token');
+  const tenantKey = localStorage.getItem('tenant_key');
+  if(!token || !tenantKey){ window.location.href = '/static/Login.html'; }
+
+  const origin = window.location.origin;
+  document.getElementById('tenantKey').textContent = tenantKey;
+  document.getElementById('apiBase').textContent   = origin + '/api';
+  document.getElementById('whUrl').textContent     = `${origin}/api/whatsapp/webhook?tenant=${tenantKey}`;
+
+  // ENV tabanlı değerler için bilgilendirme (sadece görsel)
+  // Zoom ve Verify token backend ENV’de; burada bilgi amaçlı gösteriyoruz.
+  // Dilersen bu ikisini /api/config gibi bir endpoint’ten gerçek değerle çekebilirsin.
+
+  // cURL örneği
+  const curl = `curl -H "Authorization: Bearer ${token}" ${origin}/health`;
+  document.getElementById('curlBox').textContent = curl;
+
+  function copy(id){
+    const txt = document.getElementById(id).textContent;
+    navigator.clipboard.writeText(txt);
+  }
+  function logout(){
+    localStorage.removeItem('token');
+    localStorage.removeItem('tenant_key');
+    window.location.href = '/static/Login.html';
+  }
+  function goSchedule(){
+    alert('Randevu oluşturma arayüzü bir sonraki adımda eklenecek. 👍');
+  }
+</script>
+</body>
+</html>
