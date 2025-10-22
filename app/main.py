@@ -87,6 +87,10 @@ def health():
 
 # ----------------- Auth APIs -----------------
 @app.post("/api/auth/signup")
+from sqlmodel import select
+from fastapi import HTTPException
+
+@app.post("/api/auth/signup")
 async def signup(req: Request, session: Session = Depends(get_session)):
     data = await req.json()
     email = data["email"].strip().lower()
@@ -96,13 +100,23 @@ async def signup(req: Request, session: Session = Depends(get_session)):
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Şifre en az 6 karakter olmalı")
 
+    # AYNI E-POSTAYI TEKRAR KAYDA İZİN VERME
+    existing = session.exec(select(User).where(User.email == email)).first()
+    if existing:
+        # İstersen 409 ile hata döndür:
+        # raise HTTPException(status_code=409, detail="Bu e-posta kayıtlı. Lütfen giriş yapın.")
+        # Ya da mevcut kullanıcıya token ver (kolay mod):
+        token = create_access_token(str(existing.id), settings.jwt_secret, settings.jwt_expire_minutes)
+        tenant = session.get(Tenant, existing.tenant_id)
+        return {"access_token": token, "tenant_key": tenant.tenant_key}
+
     tenant = Tenant(name=name, tenant_key=secrets.token_urlsafe(6))
     session.add(tenant); session.commit(); session.refresh(tenant)
 
     u = User(tenant_id=tenant.id, email=email, password_hash=hash_password(password), role="admin")
     session.add(u); session.commit(); session.refresh(u)
 
-    token = create_access_token(subject=str(u.id), secret=settings.jwt_secret, minutes=settings.jwt_expire_minutes)
+    token = create_access_token(str(u.id), settings.jwt_secret, settings.jwt_expire_minutes)
     reschedule_all(session)
     return {"access_token": token, "tenant_key": tenant.tenant_key}
 
