@@ -168,23 +168,69 @@ def _send_whatsapp_safe(phone: str, text: str):
             pass
 
 # ----------------- Appointments -----------------
-@app.get("/api/appointments")
-def list_appointments(u: User = Depends(current_user), session: Session = Depends(get_session)):
-    appts = session.exec(
-        select(Appointment).where(Appointment.tenant_id == u.tenant_id).order_by(Appointment.start.desc())
-    ).all()
-    out = []
-    for a in appts:
-        c = session.get(Client, a.client_id)
-        out.append({
-            "id": a.id,
-            "phone": c.phone if c else "-",
-            "start": a.start.isoformat(),
-            "end": a.end.isoformat(),
-            "status": a.status,
-            "source": a.source,
-        })
-    return out
+# en üstlerde importlar arasında olsun
+from zoneinfo import ZoneInfo
+
+@app.post("/api/appointments")
+async def create_appointment(
+    req: Request,
+    u: User = Depends(current_user),
+    session: Session = Depends(get_session),
+):
+    data = await req.json()
+    phone = data["phone"].strip()
+
+    # İstemci saatini yerel TZ kabul et, UTC'ye çevir
+    local_tz = ZoneInfo(settings.timezone)  # örn: "Europe/Istanbul"
+
+    raw_start = datetime.fromisoformat(data["start"])  # '2025-10-24T13:00'
+    if raw_start.tzinfo is None:
+        start = raw_start.replace(tzinfo=local_tz).astimezone(timezone.utc)
+    else:
+        start = raw_start.astimezone(timezone.utc)
+
+    # end yoksa slot süresinden hesapla
+    if data.get("end"):
+        raw_end = datetime.fromisoformat(data["end"])
+        if raw_end.tzinfo is None:
+            end = raw_end.replace(tzinfo=local_tz).astimezone(timezone.utc)
+        else:
+            end = raw_end.astimezone(timezone.utc)
+    else:
+        end = start + timedelta(minutes=settings.slot_minutes)
+
+    # Danışanı (yoksa oluştur) ve randevuyu kaydet
+    client = ensure_client(session, u.tenant_id, phone)
+    appt = Appointment(
+        tenant_id=u.tenant_id,
+        client_id=client.id,
+        start=start,
+        end=end,
+        status="confirmed",
+        source="manual",
+    )
+    session.add(appt)
+    session.commit()
+    session.refresh(appt)
+
+    # WhatsApp mesajını denerken uygulamayı çökertmeyelim
+    try:
+        zoom_text = f"\nZoom: {settings.zoom_join_url}" if settings.zoom_join_url else ""
+        start_local_str = start.astimezone(local_tz).strftime("%d.%m.%Y %H:%M")
+        if settings.whatsapp_access_token and settings.whatsapp_phone_number_id:
+            send_whatsapp_text(
+                settings.whatsapp_access_token,
+                settings.whatsapp_phone_number_id,
+                phone,
+                f"Randevunuz onaylandı: {start_local_str}{zoom_text}",
+            )
+    except Exception:
+        # Loglamak istersen: print("WA send failed:", e)
+        pass
+
+    reschedule_all(session)
+    return {"id": appt.id}
+
 
 @app.get("/api/appointments/upcoming")
 def list_upcoming_appointments(limit: int = 20, u: User = Depends(current_user), session: Session = Depends(get_session)):
