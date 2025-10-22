@@ -1,67 +1,64 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Giriş Yap | Psych Scheduler SaaS</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Giriş • Psych Scheduler</title>
+  <style>
+    body{margin:0;background:#f8fafc;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:#0f172a}
+    .wrap{max-width:420px;margin:80px auto;padding:0 16px}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 8px 30px rgba(2,6,23,.06);padding:22px}
+    h1{margin:0 0 12px 0;font-size:22px;font-weight:800}
+    label{display:block;margin:10px 0 6px}
+    input{width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:10px}
+    button{width:100%;margin-top:14px;padding:12px 14px;border:0;border-radius:10px;background:#4f46e5;color:#fff;font-weight:800;cursor:pointer}
+    .muted{color:#64748b;font-size:13px;margin-top:10px;text-align:center}
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h2>Giriş Yap</h2>
-    <input id="email" type="email" placeholder="E-posta" required />
-    <input id="password" type="password" placeholder="Şifre" required />
-    <button id="loginBtn">Giriş Yap</button>
-    <p>Hesabın yok mu? <a href="/static/index.html">Kayıt Ol</a></p>
-    <p id="status"></p>
+  <div class="wrap">
+    <div class="card">
+      <h1>Giriş Yap</h1>
+      <form onsubmit="doLogin(event)">
+        <label for="email">E-posta</label>
+        <input id="email" type="email" required autocomplete="username" />
+
+        <label for="password">Şifre</label>
+        <input id="password" type="password" required minlength="6" autocomplete="current-password" />
+
+        <button type="submit">Giriş Yap</button>
+      </form>
+      <div class="muted">Kayıtlı değilsen önce <a href="/static/index.html">Kayıt Ol</a>.</div>
+    </div>
   </div>
 
- <script>
-document.getElementById("loginBtn").addEventListener("click", async () => {
-  const email = document.getElementById("email").value.trim().toLowerCase();
-  const password = document.getElementById("password").value;
-  const status = document.getElementById("status");
-  const base = window.location.origin; // https://psych-scheduler-saas-full.onrender.com
+  <script>
+    async function doLogin(e){
+      e.preventDefault();
+      const email = document.getElementById("email").value.trim().toLowerCase();
+      const password = document.getElementById("password").value;
 
-  status.style.color = "#333";
-  status.textContent = "Gönderiliyor...";
+      // Sadece LOGIN endpoint!
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ email, password })
+      });
 
-  try {
-    const resp = await fetch(`${base}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
+      if(!res.ok){
+        const txt = await res.text();
+        alert("Giriş başarısız: " + txt);
+        return;
+      }
 
-    // Önce düz metin olarak al
-    const raw = await resp.text();
-    let data;
-    try {
-      data = JSON.parse(raw);           // JSON ise parse et
-    } catch (e) {
-      // JSON değilse (HTML vs.) anlamlı hata ver
-      throw new Error(`Sunucudan beklenmeyen yanıt: ${raw.slice(0,120)}... (HTTP ${resp.status})`);
+      const data = await res.json();
+      localStorage.setItem("token", data.access_token);
+      if (data.tenant_key) localStorage.setItem("tenantKey", data.tenant_key);
+
+      // Başarı -> panele geç
+      window.location.href = "/static/dashboard.html";
+      // dashboard yoksa: window.location.href = "/static/schedule.html";
     }
-
-    if (!resp.ok) {
-      throw new Error(data?.detail || `Giriş başarısız (HTTP ${resp.status})`);
-    }
-
-    // Başarılı: token + tenant_key sakla, panele geç
-    localStorage.setItem("token", data.access_token);
-    localStorage.setItem("tenant_key", data.tenant_key);
-
-    status.style.color = "green";
-    status.textContent = "✅ Giriş başarılı!";
-   setTimeout(() => {
-    window.location.href = "/static/schedule.html";
-}, 1000);
-
-  } catch (err) {
-    status.style.color = "red";
-    status.textContent = "❌ " + (err.message || "Bilinmeyen hata");
-  }
-});
-</script>
+  </script>
 </body>
 </html>
