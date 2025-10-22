@@ -208,47 +208,51 @@ def list_upcoming_appointments(limit: int = 20, u: User = Depends(current_user),
         })
     return out
 
+# app/main.py (yalnızca /api/appointments içinde değişiklik)
+from zoneinfo import ZoneInfo
+
 @app.post("/api/appointments")
 async def create_appointment(req: Request, u: User = Depends(current_user), session: Session = Depends(get_session)):
-    payload = await req.json()
+    data = await req.json()
+    phone = data["phone"]
 
-    # Telefon zorunlu
-    phone = payload.get("phone")
-    if not phone:
-        raise HTTPException(400, "Telefon zorunlu")
+    # İstemciden gelen 'start' naive olabilir -> timezone ekle
+    local_tz = ZoneInfo(settings.timezone)  # örn. Europe/Istanbul
 
-    # Başlangıç ve bitişi esnek şekilde parse et
-    start, end = _parse_start_end_from_payload(payload)
+    raw_start = datetime.fromisoformat(data["start"])  # '2025-10-24T13:00'
+    if raw_start.tzinfo is None:
+        start = raw_start.replace(tzinfo=local_tz).astimezone(timezone.utc)
+    else:
+        start = raw_start.astimezone(timezone.utc)
 
-    # Çakışma kontrolü
-    overlap = session.exec(
-        select(Appointment)
-        .where(Appointment.tenant_id == u.tenant_id)
-        .where(Appointment.start < end)
-        .where(Appointment.end > start)
-        .limit(1)
-    ).first()
-    if overlap:
-        raise HTTPException(409, "Bu saat aralığında başka bir randevu var.")
+    # end'i ya istemciden al ya da slot süresine göre hesapla
+    if "end" in data and data["end"]:
+        raw_end = datetime.fromisoformat(data["end"])
+        if raw_end.tzinfo is None:
+            end = raw_end.replace(tzinfo=local_tz).astimezone(timezone.utc)
+        else:
+            end = raw_end.astimezone(timezone.utc)
+    else:
+        end = start + timedelta(minutes=settings.slot_minutes)
 
     client = ensure_client(session, u.tenant_id, phone)
     appt = Appointment(
-        tenant_id=u.tenant_id,
-        client_id=client.id,
-        start=start,
-        end=end,
-        status="confirmed",
-        source=payload.get("source", "manual"),
+        tenant_id=u.tenant_id, client_id=client.id,
+        start=start, end=end, status="confirmed", source="manual"
     )
     session.add(appt); session.commit(); session.refresh(appt)
 
     # Onay mesajı (Zoom linki dahil)
-    zoom_text = f"\nZoom: {settings.zoom_join_url}" if getattr(settings, "zoom_join_url", "") else ""
-    local_text_time = start.astimezone(ZoneInfo(getattr(settings, "timezone", "Europe/Istanbul"))).strftime("%d.%m.%Y %H:%M")
-    _send_whatsapp_safe(phone, f"Randevunuz onaylandı: {local_text_time}{zoom_text}")
+    zoom_text = f"\nZoom: {settings.zoom_join_url}" if settings.zoom_join_url else ""
+    # Kullanıcıya okunur olması için yerel saate çevirerek gönderelim
+    start_local = start.astimezone(local_tz).strftime('%d.%m.%Y %H:%M')
+    send_whatsapp_text(
+        settings.whatsapp_access_token, settings.whatsapp_phone_number_id, phone,
+        f"Randevunuz onaylandı: {start_local}{zoom_text}"
+    )
 
     reschedule_all(session)
-    return {"id": appt.id, "start": start.isoformat(), "end": end.isoformat()}
+    return {"id": appt.id}
 
 # ----------------- WhatsApp Webhook -----------------
 @app.get("/whatsapp/webhook/{tenant_key}")
