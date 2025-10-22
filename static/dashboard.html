@@ -2,110 +2,211 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Panel • Psych Scheduler</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="/static/icon.png" />
   <style>
-    body { background:#f7f8fc; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#1f2937; }
-    .container{ max-width:980px; margin:40px auto; padding:0 16px; }
-    .card{ background:#fff; border-radius:16px; box-shadow:0 6px 24px rgba(0,0,0,.06); padding:22px; margin-bottom:16px; }
-    .title{ font-size:28px; font-weight:800; display:flex; align-items:center; gap:10px; margin:0 0 8px; }
-    .muted{ color:#6b7280; }
-    .row{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-    @media (max-width:900px){ .row{ grid-template-columns:1fr; } }
-    .btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:12px 18px; border-radius:10px; border:0; cursor:pointer; font-weight:700; }
-    .btn-primary{ background:#4f46e5; color:white; }
-    .btn-secondary{ background:#e5e7eb; color:#111827; }
-    .kbd{ background:#f3f4f6; border-radius:6px; padding:6px 8px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; }
-    .field{ display:flex; align-items:center; gap:10px; margin-top:8px; }
-    input.readonly{ width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; background:#fafafa; }
-    .section-title{ font-weight:800; margin:0 0 12px; }
-    .flex-end{ display:flex; justify-content:flex-end; gap:10px; }
+    :root{
+      --bg:#f8fafc; --card:#fff; --ink:#0f172a; --muted:#64748b; --primary:#4f46e5; --ring:#e2e8f0;
+    }
+    *{box-sizing:border-box} html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Inter,Arial,sans-serif}
+    .wrap{max-width:1000px;margin:24px auto;padding:0 16px}
+    .toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .title{font-size:24px;font-weight:800;margin:0}
+    .card{background:var(--card);border-radius:14px;box-shadow:0 8px 30px rgba(2,6,23,.06);border:1px solid var(--ring);padding:18px;margin-bottom:14px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media (max-width:900px){.row{grid-template-columns:1fr}}
+    .muted{color:var(--muted)}
+    .label{font-weight:700;margin-right:6px}
+    .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f1f5f9;border:1px solid var(--ring);padding:6px 8px;border-radius:8px}
+    input.readonly{width:100%;padding:10px 12px;border:1px solid var(--ring);border-radius:10px;background:#f9fafb}
+    .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+    .btn-primary{background:var(--primary);color:#fff}
+    .btn-secondary{background:#e5e7eb}
+    .btn-ghost{background:transparent;border:1px solid var(--ring)}
+    .grid-actions{display:flex;gap:10px;flex-wrap:wrap}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    th,td{padding:10px 12px;text-align:left}
+    th{color:var(--muted);font-weight:700}
+    tr{background:#fff;border:1px solid var(--ring)}
+    tr td:first-child,tr th:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px}
+    tr td:last-child,tr th:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px}
+    .pill{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid var(--ring);font-size:12px}
+    .right{display:flex;gap:10px;align-items:center}
+    .hint{font-size:12px;color:var(--muted)}
+    .ok{color:#16a34a;font-weight:700}
+    .err{color:#dc2626;font-weight:700}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
   </style>
 </head>
 <body>
-  <main class="container">
-    <!-- Hoş geldin -->
-    <section class="card">
-      <h1 class="title">👋 Hoş geldin</h1>
-      <p class="muted">Giriş yaptın. Aşağıda entegrasyon bağlantıların ve hızlı aksiyonlar var.</p>
-
-      <div class="field">
-        <strong>Tenant Key:</strong>
-        <span id="tenantKey" class="kbd">Yükleniyor…</span>
+  <div class="wrap">
+    <div class="toolbar">
+      <h1 class="title">👋 Panel</h1>
+      <div class="right">
+        <a class="btn btn-primary" href="/static/schedule.html">📅 Randevu Planla</a>
+        <button id="refresh" class="btn btn-ghost">↻ Yenile</button>
+        <button id="logout" class="btn btn-secondary">Çıkış</button>
       </div>
-      <div class="field">
-        <strong>API Base:</strong>
-        <input id="apiBase" class="readonly" readonly value="">
-      </div>
-    </section>
+    </div>
 
-    <!-- Webhook & Zoom -->
-    <section class="row">
-      <div class="card">
-        <h2 class="section-title">🔗 WhatsApp Webhook URL</h2>
-        <input id="webhookUrl" class="readonly" readonly value="">
-        <div class="field">
-          <button id="copyWebhook" class="btn btn-secondary">Kopyala</button>
-          <span class="muted">ENV: <span class="kbd">VERIFY_TOKEN</span></span>
+    <!-- Kimlik & Bağlantılar -->
+    <div class="row">
+      <section class="card">
+        <h3 style="margin:0 0 8px 0;">Klinik Bilgileri</h3>
+        <div style="display:grid;gap:10px">
+          <div><span class="label">E-posta:</span><span id="meEmail" class="kbd">yükleniyor…</span></div>
+          <div><span class="label">Tenant Key:</span><span id="tenantKey" class="kbd">yükleniyor…</span></div>
+          <div><span class="label">API Base:</span><input id="apiBase" class="readonly" readonly></div>
         </div>
+      </section>
+
+      <section class="card">
+        <h3 style="margin:0 0 8px 0;">Entegrasyonlar</h3>
+        <div style="display:grid;gap:10px">
+          <div>
+            <div class="label">WhatsApp Webhook URL</div>
+            <div style="display:flex;gap:8px">
+              <input id="webhookUrl" class="readonly" readonly>
+              <button id="copyWebhook" class="btn btn-ghost">Kopyala</button>
+            </div>
+            <div class="hint">Meta doğrulaması için <span class="mono">VERIFY_TOKEN</span> ENV değerini kullan.</div>
+          </div>
+          <div>
+            <div class="label">Zoom Toplantı Linki (ENV)</div>
+            <div id="zoomInfo" class="hint">.env / Render ENV’de <span class="mono">ZOOM_MEETING_URL</span> tanımlıysa onay mesajlarına eklenir.</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Hızlı Komutlar -->
+    <section class="card">
+      <h3 style="margin:0 0 8px 0;">Hızlı Test</h3>
+      <div style="display:grid;gap:10px">
+        <div>
+          <div class="label">Upcoming (curl)</div>
+          <input id="curlUpcoming" class="readonly" readonly>
+        </div>
+        <div>
+          <div class="label">Örnek Randevu Oluşturma (curl)</div>
+          <input id="curlCreate" class="readonly" readonly>
+        </div>
+        <div class="hint">Bu komutlar <span class="mono">Authorization: Bearer &lt;token&gt;</span> başlığı ile çalışır.</div>
       </div>
-      <div class="card">
-        <h2 class="section-title">📹 Zoom Toplantı Linki</h2>
-        <p class="muted">ENV: <span class="kbd">ZOOM_MEETING_URL</span></p>
-        <p class="muted">Hatırlatma mesajlarında bu link otomatik eklenir.</p>
+      <div class="grid-actions" style="margin-top:10px">
+        <button id="copyUpcoming" class="btn btn-ghost">curl (upcoming) kopyala</button>
+        <button id="copyCreate" class="btn btn-ghost">curl (create) kopyala</button>
       </div>
     </section>
 
-    <!-- Token ile test -->
+    <!-- Yaklaşan Randevular -->
     <section class="card">
-      <h2 class="section-title">🧪 Token ile test</h2>
-      <input id="curlCmd" class="readonly" readonly value="">
-      <div class="flex-end" style="margin-top:12px;">
-        <!-- ÇALIŞAN RANDEVU PLANLA BUTONU -->
-        <a href="/static/schedule.html" class="btn btn-primary">📅 Randevu Planla</a>
-        <button id="logoutBtn" class="btn btn-secondary">Çıkış Yap</button>
+      <div class="toolbar" style="margin:0 0 6px 0">
+        <h3 style="margin:0">Yaklaşan Randevular</h3>
+        <span id="listStatus" class="hint">yükleniyor…</span>
+      </div>
+      <div style="overflow:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Telefon</th>
+              <th>Başlangıç</th>
+              <th>Bitiş</th>
+              <th>Durum</th>
+              <th>Kaynak</th>
+            </tr>
+          </thead>
+          <tbody id="apptRows">
+            <tr><td colspan="6" class="muted">Veri yok</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
-  </main>
+  </div>
 
   <script>
-    (function () {
-      const apiBase = location.origin + "/api";
-      document.getElementById("apiBase").value = apiBase;
+    // ---- yardımcılar
+    const $ = (id)=>document.getElementById(id);
+    const fmtLocal = (iso)=>{
+      try { return new Date(iso).toLocaleString(); } catch { return iso || "-"; }
+    };
+    const copy = (el)=>{ el.select(); document.execCommand("copy"); el.blur(); };
 
-      const token = localStorage.getItem("token");
-      if (!token) {
-        location.href = "/static/Login.html";
+    // ---- guard
+    const token = localStorage.getItem("token");
+    if(!token){ location.href="/static/Login.html"; }
+
+    // ---- sabitler
+    const API = location.origin + "/api";
+    $("apiBase").value = API;
+
+    // ---- kimlik / tenant bilgisi
+    async function loadMe(){
+      const res = await fetch(API + "/me", { headers:{ Authorization:"Bearer " + token }});
+      if(!res.ok){ localStorage.removeItem("token"); location.href="/static/Login.html"; return; }
+      const me = await res.json();
+      $("meEmail").textContent = me.email || "-";
+      const tenantKey = (me.tenant && me.tenant.tenant_key) || localStorage.getItem("tenantKey") || "";
+      $("tenantKey").textContent = tenantKey;
+      if(tenantKey){ localStorage.setItem("tenantKey", tenantKey); }
+      const webhook = `${location.origin}/whatsapp/webhook/${tenantKey}`;
+      $("webhookUrl").value = webhook;
+
+      // curl örnekleri
+      $("curlUpcoming").value = `curl -H "Authorization: Bearer ${token}" ${API}/appointments/upcoming`;
+      const startEx = new Date(Date.now()+86400000).toISOString().slice(0,16); // yarın, dakika hassas
+      $("curlCreate").value = `curl -X POST ${API}/appointments -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"phone":"+905551112233","start":"${startEx}"}'`;
+    }
+
+    // ---- yaklaşan randevular
+    async function loadUpcoming(){
+      $("listStatus").textContent = "yükleniyor…";
+      const res = await fetch(API + "/appointments/upcoming", { headers:{ Authorization: "Bearer " + token }});
+      if(!res.ok){
+        $("listStatus").innerHTML = `<span class="err">hata (${res.status})</span>`;
         return;
       }
+      const data = await res.json();
+      $("listStatus").innerHTML = `<span class="ok">${data.length} kayıt</span>`;
+      const tbody = $("apptRows");
+      tbody.innerHTML = "";
+      if(!data.length){
+        const tr = document.createElement("tr"); const td = document.createElement("td");
+        td.colSpan = 6; td.className="muted"; td.textContent = "Kayıt yok";
+        tr.appendChild(td); tbody.appendChild(tr); return;
+      }
+      for(const a of data){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${a.id}</td>
+          <td>${a.phone || "-"}</td>
+          <td>${fmtLocal(a.start)}</td>
+          <td>${fmtLocal(a.end)}</td>
+          <td><span class="pill">${a.status}</span></td>
+          <td>${a.source}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
 
-      fetch(apiBase + "/me", { headers: { "Authorization": "Bearer " + token }})
-        .then(r => r.json())
-        .then(me => {
-          const tenantKey = me?.tenant?.tenant_key || "";
-          document.getElementById("tenantKey").textContent = tenantKey;
+    // ---- olaylar
+    $("copyWebhook").onclick = ()=>{ copy($("webhookUrl")); alert("Webhook kopyalandı"); };
+    $("copyUpcoming").onclick = ()=>{ copy($("curlUpcoming")); alert("Kopyalandı"); };
+    $("copyCreate").onclick = ()=>{ copy($("curlCreate")); alert("Kopyalandı"); };
+    $("logout").onclick = ()=>{ localStorage.removeItem("token"); localStorage.removeItem("tenantKey"); location.href="/static/Login.html"; };
+    $("refresh").onclick = ()=>{ loadUpcoming(); };
 
-          const webhook = `${location.origin}/whatsapp/webhook/${tenantKey}`;
-          document.getElementById("webhookUrl").value = webhook;
-
-          const curl = `curl -H "Authorization: Bearer ${token}" ${apiBase}/appointments/upcoming`;
-          document.getElementById("curlCmd").value = curl;
-        })
-        .catch(() => {
-          localStorage.removeItem("token");
-          location.href = "/static/Login.html";
-        });
-
-      document.getElementById("copyWebhook").onclick = () => {
-        navigator.clipboard.writeText(document.getElementById("webhookUrl").value);
-        alert("Kopyalandı");
-      };
-
-      document.getElementById("logoutBtn").onclick = () => {
-        localStorage.removeItem("token");
-        location.href = "/static/Login.html";
-      };
+    // ---- başlat
+    (async function init(){
+      try{
+        await loadMe();
+        await loadUpcoming();
+      }catch(e){
+        console.error(e);
+        alert("Panel yüklenemedi. Yeniden giriş yapmayı deneyin.");
+      }
     })();
   </script>
 </body>
