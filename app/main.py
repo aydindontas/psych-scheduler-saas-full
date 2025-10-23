@@ -1,3 +1,4 @@
+# app/main.py
 import os, secrets
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -5,6 +6,8 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request, Depends, HTTPException, Header, Query
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+
 from sqlmodel import Session, select
 
 from .db import init_db, get_session
@@ -15,9 +18,22 @@ from .logic import working_slots, busy_from_db, ensure_client
 from .whatsapp import send_whatsapp_text
 from .scheduler import start_scheduler, schedule_all
 
-# ----------------- App & Settings -----------------
+# ---------------------------------------------------------------------------
+# App & Settings
+# ---------------------------------------------------------------------------
 settings = load_settings()
 app = FastAPI(title="Psych Scheduler SaaS")
+
+# CORS (gerekirse farklı origin'den istekler için)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # isterseniz kısıtlayın
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# DB init
 init_db()
 
 # Statik dosyalar
@@ -29,7 +45,7 @@ def root():
         return FileResponse("static/index.html")
     return HTMLResponse("<h1>Psych Scheduler SaaS</h1><p>UI için static/index.html ekleyin.</p>")
 
-# Kısa yollar
+# Kısa yol sayfalar
 @app.get("/dashboard", response_class=HTMLResponse)
 def _dash():
     path = "static/dashboard.html"
@@ -44,77 +60,94 @@ def _schedule():
         return FileResponse(path)
     raise HTTPException(404, "schedule.html yok")
 
-def tznow():
+def tznow() -> datetime:
     return datetime.now(timezone.utc)
 
-# ----------------- Scheduler -----------------
+# ---------------------------------------------------------------------------
+# Scheduler
+# ---------------------------------------------------------------------------
 scheduler = start_scheduler()
 scheduler.start()
 
 def reschedule_all(session: Session):
     schedule_all(
-        session,
-        scheduler,
-        settings.reminder_24h,
-        settings.reminder_1h,
-        settings.zoom_join_url,
-        {"access_token": settings.whatsapp_access_token, "phone_number_id": settings.whatsapp_phone_number_id},
+        session=session,
+        scheduler=scheduler,
+        remind_24h=settings.reminder_24h,
+        remind_1h=settings.reminder_1h,
+        zoom_join_url=settings.zoom_join_url,
+        wa_creds={
+            "access_token": settings.whatsapp_access_token,
+            "phone_number_id": settings.whatsapp_phone_number_id,
+        },
     )
 
-# ----------------- Auth helper -----------------
+# ---------------------------------------------------------------------------
+# Auth helper (JWT)
+# ---------------------------------------------------------------------------
 from jose import jwt, JWTError
 
-def current_user(authorization: str = Header(None), session: Session = Depends(get_session)) -> User:
+def current_user(
+    authorization: str = Header(None),
+    session: Session = Depends(get_session)
+) -> User:
     if not authorization:
-        raise HTTPException(401, "Auth gerekli")
+        raise HTTPException(status_code=401, detail="Auth gerekli")
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer":
-        raise HTTPException(401, "Bearer bekleniyor")
+        raise HTTPException(status_code=401, detail="Bearer bekleniyor")
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
         uid = int(payload["sub"])
     except JWTError:
-        raise HTTPException(401, "Token geçersiz")
+        raise HTTPException(status_code=401, detail="Token geçersiz")
     u = session.get(User, uid)
     if not u:
-        raise HTTPException(401, "Kullanıcı yok")
+        raise HTTPException(status_code=401, detail="Kullanıcı yok")
     return u
 
-# ----------------- Health -----------------
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
 @app.get("/health")
 def health():
     return {"ok": True}
 
-# ----------------- Auth APIs -----------------
-@app.post("/api/auth/signup")
-from sqlmodel import select
-from fastapi import HTTPException
-
+# ---------------------------------------------------------------------------
+# Auth APIs
+# ---------------------------------------------------------------------------
 @app.post("/api/auth/signup")
 async def signup(req: Request, session: Session = Depends(get_session)):
-    data = await req.json()
-    email = data["email"].strip().lower()
-    password = data["password"]
-    name = data.get("clinic", "Klinik")
+    try:
+        data = await req.json()
+    except Exception:
+        raise HTTPException(400, "Geçersiz JSON")
 
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    name = (data.get("clinic") or "Klinik").strip()
+
+    if not email or not password:
+        raise HTTPException(400, "E-posta ve şifre zorunlu")
     if len(password) < 6:
-        raise HTTPException(status_code=400, detail="Şifre en az 6 karakter olmalı")
+        raise HTTPException(400, "Şifre en az 6 karakter olmalı")
 
-    # AYNI E-POSTAYI TEKRAR KAYDA İZİN VERME
+    # aynı email varsa yeni tenant açmadan token dönebiliriz (kolay mod)
     existing = session.exec(select(User).where(User.email == email)).first()
     if existing:
-        # İstersen 409 ile hata döndür:
-        # raise HTTPException(status_code=409, detail="Bu e-posta kayıtlı. Lütfen giriş yapın.")
-        # Ya da mevcut kullanıcıya token ver (kolay mod):
         token = create_access_token(str(existing.id), settings.jwt_secret, settings.jwt_expire_minutes)
         tenant = session.get(Tenant, existing.tenant_id)
         return {"access_token": token, "tenant_key": tenant.tenant_key}
 
     tenant = Tenant(name=name, tenant_key=secrets.token_urlsafe(6))
-    session.add(tenant); session.commit(); session.refresh(tenant)
+    session.add(tenant)
+    session.commit()
+    session.refresh(tenant)
 
     u = User(tenant_id=tenant.id, email=email, password_hash=hash_password(password), role="admin")
-    session.add(u); session.commit(); session.refresh(u)
+    session.add(u)
+    session.commit()
+    session.refresh(u)
 
     token = create_access_token(str(u.id), settings.jwt_secret, settings.jwt_expire_minutes)
     reschedule_all(session)
@@ -122,13 +155,19 @@ async def signup(req: Request, session: Session = Depends(get_session)):
 
 @app.post("/api/auth/login")
 async def login(req: Request, session: Session = Depends(get_session)):
-    data = await req.json()
-    email = data["email"].strip().lower()
-    password = data["password"]
+    try:
+        data = await req.json()
+    except Exception:
+        raise HTTPException(400, "Geçersiz JSON")
+
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+
     u = session.exec(select(User).where(User.email == email)).first()
     if not u or not verify_password(password, u.password_hash):
         raise HTTPException(401, "Geçersiz bilgiler")
-    token = create_access_token(subject=str(u.id), secret=settings.jwt_secret, minutes=settings.jwt_expire_minutes)
+
+    token = create_access_token(str(u.id), settings.jwt_secret, settings.jwt_expire_minutes)
     reschedule_all(session)
     tenant = session.get(Tenant, u.tenant_id)
     return {"access_token": token, "tenant_key": tenant.tenant_key}
@@ -138,116 +177,47 @@ def me(u: User = Depends(current_user), session: Session = Depends(get_session))
     tenant = session.get(Tenant, u.tenant_id)
     return {"email": u.email, "tenant": {"name": tenant.name, "tenant_key": tenant.tenant_key}}
 
-# --------------- Helpers ----------------
-def _parse_start_end_from_payload(payload: dict) -> tuple[datetime, datetime]:
-    """
-    Esnek tarih/saat parse:
-      - start (ISO) + end (ISO)
-      - starts_at (ISO) + duration (dk)
-      - date (YYYY-MM-DD) + time (HH:MM) + duration (dk)
-    Return: (start_utc, end_utc)
-    """
-    tz = ZoneInfo(getattr(settings, "timezone", "Europe/Istanbul"))
-
-    # 1) start + end (ISO)
-    if "start" in payload and "end" in payload:
-        start = datetime.fromisoformat(payload["start"])
-        end = datetime.fromisoformat(payload["end"])
-        return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
-
-    # 2) starts_at (ISO) + duration
-    if "starts_at" in payload:
-        start = datetime.fromisoformat(payload["starts_at"])
-        duration = int(payload.get("duration", getattr(settings, "slot_minutes", 60)))
-        end = start + timedelta(minutes=duration)
-        return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
-
-    # 3) date + time + duration (yerel timezone'a göre)
-    if "date" in payload and "time" in payload:
-        duration = int(payload.get("duration", getattr(settings, "slot_minutes", 60)))
-        # yerel tz aware -> sonra UTC
-        local_dt = datetime.fromisoformat(f"{payload['date']}T{payload['time']}:00").replace(tzinfo=tz)
-        start = local_dt.astimezone(timezone.utc)
-        end = start + timedelta(minutes=duration)
-        return start, end
-
-    raise HTTPException(400, "Tarih/saat formatı eksik veya hatalı")
-
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 def _send_whatsapp_safe(phone: str, text: str):
+    """WA gönderimi sırasında hatayı yut; uygulama düşmesin."""
     if getattr(settings, "whatsapp_access_token", None) and getattr(settings, "whatsapp_phone_number_id", None):
         try:
             send_whatsapp_text(settings.whatsapp_access_token, settings.whatsapp_phone_number_id, phone, text)
         except Exception:
-            # Sessiz geç
             pass
 
-# ----------------- Appointments -----------------
-# en üstlerde importlar arasında olsun
-from zoneinfo import ZoneInfo
+# ---------------------------------------------------------------------------
+# Appointments
+# ---------------------------------------------------------------------------
+@app.get("/api/appointments")
+def list_appointments(u: User = Depends(current_user), session: Session = Depends(get_session)):
+    appts = session.exec(
+        select(Appointment)
+        .where(Appointment.tenant_id == u.tenant_id)
+        .order_by(Appointment.start.desc())
+    ).all()
 
-@app.post("/api/appointments")
-async def create_appointment(
-    req: Request,
+    out = []
+    for a in appts:
+        c = session.get(Client, a.client_id)
+        out.append({
+            "id": a.id,
+            "phone": c.phone if c else "-",
+            "start": a.start.isoformat(),
+            "end": a.end.isoformat(),
+            "status": a.status,
+            "source": a.source,
+        })
+    return out
+
+@app.get("/api/appointments/upcoming")
+def list_upcoming_appointments(
+    limit: int = 20,
     u: User = Depends(current_user),
     session: Session = Depends(get_session),
 ):
-    data = await req.json()
-    phone = data["phone"].strip()
-
-    # İstemci saatini yerel TZ kabul et, UTC'ye çevir
-    local_tz = ZoneInfo(settings.timezone)  # örn: "Europe/Istanbul"
-
-    raw_start = datetime.fromisoformat(data["start"])  # '2025-10-24T13:00'
-    if raw_start.tzinfo is None:
-        start = raw_start.replace(tzinfo=local_tz).astimezone(timezone.utc)
-    else:
-        start = raw_start.astimezone(timezone.utc)
-
-    # end yoksa slot süresinden hesapla
-    if data.get("end"):
-        raw_end = datetime.fromisoformat(data["end"])
-        if raw_end.tzinfo is None:
-            end = raw_end.replace(tzinfo=local_tz).astimezone(timezone.utc)
-        else:
-            end = raw_end.astimezone(timezone.utc)
-    else:
-        end = start + timedelta(minutes=settings.slot_minutes)
-
-    # Danışanı (yoksa oluştur) ve randevuyu kaydet
-    client = ensure_client(session, u.tenant_id, phone)
-    appt = Appointment(
-        tenant_id=u.tenant_id,
-        client_id=client.id,
-        start=start,
-        end=end,
-        status="confirmed",
-        source="manual",
-    )
-    session.add(appt)
-    session.commit()
-    session.refresh(appt)
-
-    # WhatsApp mesajını denerken uygulamayı çökertmeyelim
-    try:
-        zoom_text = f"\nZoom: {settings.zoom_join_url}" if settings.zoom_join_url else ""
-        start_local_str = start.astimezone(local_tz).strftime("%d.%m.%Y %H:%M")
-        if settings.whatsapp_access_token and settings.whatsapp_phone_number_id:
-            send_whatsapp_text(
-                settings.whatsapp_access_token,
-                settings.whatsapp_phone_number_id,
-                phone,
-                f"Randevunuz onaylandı: {start_local_str}{zoom_text}",
-            )
-    except Exception:
-        # Loglamak istersen: print("WA send failed:", e)
-        pass
-
-    reschedule_all(session)
-    return {"id": appt.id}
-
-
-@app.get("/api/appointments/upcoming")
-def list_upcoming_appointments(limit: int = 20, u: User = Depends(current_user), session: Session = Depends(get_session)):
     now = tznow()
     rows = session.exec(
         select(Appointment)
@@ -255,6 +225,7 @@ def list_upcoming_appointments(limit: int = 20, u: User = Depends(current_user),
         .order_by(Appointment.start)
         .limit(limit)
     ).all()
+
     out = []
     for a in rows:
         c = session.get(Client, a.client_id)
@@ -268,26 +239,44 @@ def list_upcoming_appointments(limit: int = 20, u: User = Depends(current_user),
         })
     return out
 
-# app/main.py (yalnızca /api/appointments içinde değişiklik)
-from zoneinfo import ZoneInfo
-
 @app.post("/api/appointments")
-async def create_appointment(req: Request, u: User = Depends(current_user), session: Session = Depends(get_session)):
-    data = await req.json()
-    phone = data["phone"]
+async def create_appointment(
+    req: Request,
+    u: User = Depends(current_user),
+    session: Session = Depends(get_session),
+):
+    try:
+        data = await req.json()
+    except Exception:
+        raise HTTPException(400, "Geçersiz JSON")
 
-    # İstemciden gelen 'start' naive olabilir -> timezone ekle
-    local_tz = ZoneInfo(settings.timezone)  # örn. Europe/Istanbul
+    phone = (data.get("phone") or "").strip()
+    if not phone:
+        raise HTTPException(400, "Telefon zorunlu")
 
-    raw_start = datetime.fromisoformat(data["start"])  # '2025-10-24T13:00'
+    # İstemciden gelen 'start' ISO olmalı (örn: 2025-10-24T13:00)
+    if not data.get("start"):
+        raise HTTPException(400, "'start' alanı zorunlu (ISO)")
+
+    local_tz = ZoneInfo(settings.timezone)
+    try:
+        raw_start = datetime.fromisoformat(data["start"])
+    except Exception:
+        raise HTTPException(400, "'start' ISO formatında olmalı")
+
+    # start -> UTC
     if raw_start.tzinfo is None:
         start = raw_start.replace(tzinfo=local_tz).astimezone(timezone.utc)
     else:
         start = raw_start.astimezone(timezone.utc)
 
-    # end'i ya istemciden al ya da slot süresine göre hesapla
-    if "end" in data and data["end"]:
-        raw_end = datetime.fromisoformat(data["end"])
+    # end -> varsa kullan; yoksa slot süresinden üret
+    end: datetime
+    if data.get("end"):
+        try:
+            raw_end = datetime.fromisoformat(data["end"])
+        except Exception:
+            raise HTTPException(400, "'end' ISO formatında olmalı")
         if raw_end.tzinfo is None:
             end = raw_end.replace(tzinfo=local_tz).astimezone(timezone.utc)
         else:
@@ -295,26 +284,41 @@ async def create_appointment(req: Request, u: User = Depends(current_user), sess
     else:
         end = start + timedelta(minutes=settings.slot_minutes)
 
+    # Danışanı bul/oluştur ve randevuyu kaydet
     client = ensure_client(session, u.tenant_id, phone)
     appt = Appointment(
-        tenant_id=u.tenant_id, client_id=client.id,
-        start=start, end=end, status="confirmed", source="manual"
+        tenant_id=u.tenant_id,
+        client_id=client.id,
+        start=start,
+        end=end,
+        status="confirmed",
+        source="manual",
     )
-    session.add(appt); session.commit(); session.refresh(appt)
+    session.add(appt)
+    session.commit()
+    session.refresh(appt)
 
-    # Onay mesajı (Zoom linki dahil)
-    zoom_text = f"\nZoom: {settings.zoom_join_url}" if settings.zoom_join_url else ""
-    # Kullanıcıya okunur olması için yerel saate çevirerek gönderelim
-    start_local = start.astimezone(local_tz).strftime('%d.%m.%Y %H:%M')
-    send_whatsapp_text(
-        settings.whatsapp_access_token, settings.whatsapp_phone_number_id, phone,
-        f"Randevunuz onaylandı: {start_local}{zoom_text}"
-    )
+    # WhatsApp bilgilendirmesi (opsiyonel)
+    try:
+        zoom_text = f"\nZoom: {settings.zoom_join_url}" if settings.zoom_join_url else ""
+        start_local_str = start.astimezone(local_tz).strftime("%d.%m.%Y %H:%M")
+        if settings.whatsapp_access_token and settings.whatsapp_phone_number_id:
+            send_whatsapp_text(
+                settings.whatsapp_access_token,
+                settings.whatsapp_phone_number_id,
+                phone,
+                f"Randevunuz onaylandı: {start_local_str}{zoom_text}",
+            )
+    except Exception:
+        pass
 
+    # Reminder’ları yeniden planla
     reschedule_all(session)
     return {"id": appt.id}
 
-# ----------------- WhatsApp Webhook -----------------
+# ---------------------------------------------------------------------------
+# WhatsApp Webhook
+# ---------------------------------------------------------------------------
 @app.get("/whatsapp/webhook/{tenant_key}")
 def wa_verify(
     tenant_key: str,
@@ -326,6 +330,7 @@ def wa_verify(
     t = session.exec(select(Tenant).where(Tenant.tenant_key == tenant_key)).first()
     if not t:
         return PlainTextResponse("tenant not found", status_code=404)
+
     if mode == "subscribe" and token == settings.whatsapp_verify_token:
         return PlainTextResponse(challenge or "")
     return PlainTextResponse("forbidden", status_code=403)
@@ -336,7 +341,11 @@ async def wa_webhook(tenant_key: str, req: Request, session: Session = Depends(g
     if not t:
         return JSONResponse({"status": "no tenant"}, status_code=404)
 
-    body = await req.json()
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"status": "bad json"}, status_code=400)
+
     try:
         entry = body["entry"][0]["changes"][0]["value"]
         message = entry["messages"][0]
@@ -354,7 +363,7 @@ async def wa_webhook(tenant_key: str, req: Request, session: Session = Depends(g
     elif any(k in text_body for k in ["bugün", "yarın", "hafta", "uygun", "saat"]):
         intent = "availability"
 
-    # bugün için uygun saatleri çıkar
+    # bugün için uygun saatler
     day = tznow()
     db_busy = busy_from_db(session, t.id, day.replace(hour=0, minute=0), day.replace(hour=0, minute=0) + timedelta(days=1))
     avail = working_slots(day, settings.work_start, settings.work_end, settings.slot_minutes, settings.timezone)
@@ -383,13 +392,14 @@ async def wa_webhook(tenant_key: str, req: Request, session: Session = Depends(g
                 _send_whatsapp_safe(from_phone, "İptal edilecek randevu bulunamadı.")
             else:
                 appt.status = 'cancelled'
-                session.add(appt); session.commit()
+                session.add(appt)
+                session.commit()
                 _send_whatsapp_safe(from_phone, "Randevunuz iptal edildi.")
                 reschedule_all(session)
     else:
         _send_whatsapp_safe(from_phone, "Merhaba! 'randevu al', 'bugün', 'yarın' veya 'iptal' yazabilirsiniz.")
 
-    # Eğer mesaj açıkça bir tarih-saat ise rezerv yap
+    # tarih-saat serbest parse -> rezerv dene
     try:
         from dateutil import parser
         dt = parser.parse(text_body)
@@ -400,8 +410,16 @@ async def wa_webhook(tenant_key: str, req: Request, session: Session = Depends(g
             _send_whatsapp_safe(from_phone, "Seçtiğiniz saat dolu. Başka bir saat dener misiniz?")
         else:
             client = ensure_client(session, t.id, from_phone)
-            appt = Appointment(tenant_id=t.id, client_id=client.id, start=start, end=end, status='confirmed', source='whatsapp')
-            session.add(appt); session.commit()
+            appt = Appointment(
+                tenant_id=t.id,
+                client_id=client.id,
+                start=start,
+                end=end,
+                status='confirmed',
+                source='whatsapp'
+            )
+            session.add(appt)
+            session.commit()
             zoom_text = f"\nZoom: {settings.zoom_join_url}" if settings.zoom_join_url else ""
             _send_whatsapp_safe(from_phone, f"Randevunuz onaylandı: {start.astimezone().strftime('%d.%m.%Y %H:%M')}{zoom_text}")
             reschedule_all(session)
