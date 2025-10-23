@@ -24,9 +24,10 @@ settings = load_settings()
 app = FastAPI(title="Psych Scheduler SaaS")
 
 BASE_DIR = os.path.dirname(__file__)
-STATIC_DIR = os.path.join(BASE_DIR, "static")
+STATIC_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "static"))
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 # ✅ DOĞRUSU: startup event’inde çağır
 from .db import init_db
