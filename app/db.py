@@ -1,15 +1,21 @@
+# app/db.py
 import os
 from sqlmodel import SQLModel, create_engine, Session
-from dotenv import load_dotenv
+from .settings import load_settings
 
-load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/app.db")
-connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(DATABASE_URL, echo=False, connect_args=connect_args)
+_settings = load_settings()
+engine = create_engine(_settings.database_url, echo=False, future=True)
 
 def init_db():
-    SQLModel.metadata.create_all(engine)
+    # SQLite için faydalı (opsiyonel)
+    if _settings.database_url.startswith("sqlite"):
+        with engine.connect() as conn:
+            conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+
+    # MODELLERİN YÜKLÜ OLDUĞUNDAN EMİN OLUN
+    from . import models  # <-- User, Tenant, Client, Appointment import edilmiş olacak
+
+    SQLModel.metadata.create_all(engine)  # <-- tablo oluşturur
 
 def get_session():
-    with Session(engine) as s:
-        yield s
+    return Session(engine)
