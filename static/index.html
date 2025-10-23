@@ -14,6 +14,21 @@
   <div>
     <label>Şifre</label><br>
     <input id="pass" type="password" placeholder="en az 6 karakter" />
+  <div class="container" style="max-width:420px;margin-top:80px">
+    <h1 class="center">Psych Scheduler</h1>
+    <p class="helper center">Paneline erişmek için giriş yap.</p>
+
+    <form id="login-form" class="card" style="margin-top:24px">
+      <label for="li-email">E-posta</label>
+      <input id="li-email" name="email" type="email" placeholder="ornek@domain.com" required />
+
+      <label for="li-password">Şifre</label>
+      <input id="li-password" name="password" type="password" placeholder="en az 6 karakter" minlength="6" required />
+
+      <button type="submit" class="btn block" style="margin-top:18px">Giriş yap</button>
+    </form>
+
+    <p id="login-status" class="helper center" style="min-height:24px;margin-top:16px"></p>
   </div>
   <button id="go">Giriş yap</button>
 
@@ -52,7 +67,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // LOGIN
   $("#login-form")?.addEventListener("submit", async (e) => {
+  const loginForm = document.querySelector("#login-form");
+  const statusEl = document.querySelector("#login-status");
+  if (!loginForm) return;
+
+  const setStatus = (msg, isError = false) => {
+    if (!statusEl) return;
+    statusEl.textContent = msg;
+    statusEl.classList.toggle("err", Boolean(isError));
+  };
+
+  loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    setStatus("Giriş yapılıyor...");
+
     const email = $("#li-email").value.trim().toLowerCase();
     const password = $("#li-password").value;
 
@@ -63,12 +91,17 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ email, password })
       });
       if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) {
+        const errTxt = await r.text();
+        throw new Error(errTxt || "Geçersiz bilgiler");
+      }
       const data = await r.json();
       localStorage.setItem("token", data.access_token);
       localStorage.setItem("tenant_key", data.tenant_key);
       window.location.href = "/schedule";
     } catch (err) {
       alert("Giriş hatası:\n" + err.message);
+      setStatus("Giriş hatası: " + (err.message || err), true);
     }
   });
 });
