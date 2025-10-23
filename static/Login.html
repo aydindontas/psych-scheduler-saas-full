@@ -33,32 +33,47 @@
   </div>
 
   <script>
-    async function doLogin(e){
-      e.preventDefault();
-      const email = document.getElementById("email").value.trim().toLowerCase();
-      const password = document.getElementById("password").value;
+document.getElementById("loginBtn").addEventListener("click", async (e) => {
+  e.preventDefault();
 
-      // Sadece LOGIN endpoint!
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ email, password })
-      });
+  const email = document.getElementById("email").value.trim().toLowerCase();
+  const password = document.getElementById("password").value;
+  const statusEl = document.getElementById("status");
 
-      if(!res.ok){
-        const txt = await res.text();
-        alert("Giriş başarısız: " + txt);
-        return;
-      }
+  statusEl.style.color = "#666";
+  statusEl.textContent = "⏳ Giriş yapılıyor...";
 
-      const data = await res.json();
-      localStorage.setItem("token", data.access_token);
-      if (data.tenant_key) localStorage.setItem("tenantKey", data.tenant_key);
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
 
-      // Başarı -> panele geç
-      window.location.href = "/static/dashboard.html";
-      // dashboard yoksa: window.location.href = "/static/schedule.html";
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Giriş başarısız");
     }
-  </script>
+
+    const data = await res.json();
+
+    // Token ve tenant_key'i sakla
+    localStorage.setItem("token", data.access_token);
+    localStorage.setItem("tenant_key", data.tenant_key);
+
+    statusEl.style.color = "green";
+    statusEl.textContent = "🔓 Giriş başarılı! Yönlendiriliyorsunuz...";
+
+    // Yönlendirme —> dashboard (veya schedule)
+    // Not: /dashboard ve /schedule backend'de kısayol route'ları var
+    setTimeout(() => {
+      window.location.assign("/dashboard");  // istersen "/schedule"
+    }, 600);
+  } catch (err) {
+    statusEl.style.color = "red";
+    statusEl.textContent = "❌ " + err.message;
+  }
+});
+</script>
 </body>
 </html>
