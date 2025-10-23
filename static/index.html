@@ -1,19 +1,12 @@
 <!doctype html>
 <html lang="tr">
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Psych Scheduler | Giriş</title>
-<link rel="stylesheet" href="/static/style.css">
-
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Psych Scheduler | Giriş</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
 <body>
-  <h1>Psych Scheduler</h1>
-  <div>
-    <label>E-posta</label><br>
-    <input id="email" type="email" placeholder="ornek@domain.com" />
-  </div>
-  <div>
-    <label>Şifre</label><br>
-    <input id="pass" type="password" placeholder="en az 6 karakter" />
   <div class="container" style="max-width:420px;margin-top:80px">
     <h1 class="center">Psych Scheduler</h1>
     <p class="helper center">Paneline erişmek için giriş yap.</p>
@@ -29,82 +22,64 @@
     </form>
 
     <p id="login-status" class="helper center" style="min-height:24px;margin-top:16px"></p>
+
+    <p class="center" style="margin-top:12px">
+      Hesabın yok mu? <a href="/static/signup.html">Kayıt ol</a>
+    </p>
   </div>
-  <button id="go">Giriş yap</button>
 
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-  // Zaten giriş yaptıysa direkt /schedule
-  if (localStorage.getItem("token")) {
-    window.location.href = "/schedule";
-    return;
-  }
-
-  const $ = (s) => document.querySelector(s);
-
-  // SIGNUP
-  $("#signup-form")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const email = $("#su-email").value.trim().toLowerCase();
-    const password = $("#su-password").value;
-    const clinic = $("#su-clinic")?.value?.trim() || "Klinik";
-
-    try {
-      const r = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ email, password, clinic })
-      });
-      if (!r.ok) throw new Error(await r.text());
-      const data = await r.json();
-      localStorage.setItem("token", data.access_token);
-      localStorage.setItem("tenant_key", data.tenant_key);
+  <script>
+  (function () {
+    // Zaten giriş yaptıysa panele yönlendir
+    if (localStorage.getItem("token")) {
       window.location.href = "/schedule";
-    } catch (err) {
-      alert("Kayıt/Giriş hatası:\n" + err.message);
+      return;
     }
-  });
 
-  // LOGIN
-  $("#login-form")?.addEventListener("submit", async (e) => {
-  const loginForm = document.querySelector("#login-form");
-  const statusEl = document.querySelector("#login-status");
-  if (!loginForm) return;
+    const $ = (s) => document.querySelector(s);
+    const loginForm = $("#login-form");
+    const statusEl  = $("#login-status");
 
-  const setStatus = (msg, isError = false) => {
-    if (!statusEl) return;
-    statusEl.textContent = msg;
-    statusEl.classList.toggle("err", Boolean(isError));
-  };
+    const setStatus = (msg, isError = false) => {
+      if (!statusEl) return;
+      statusEl.textContent = msg || "";
+      statusEl.classList.toggle("err", !!isError);
+    };
 
-  loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    setStatus("Giriş yapılıyor...");
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setStatus("Giriş yapılıyor...");
 
-    const email = $("#li-email").value.trim().toLowerCase();
-    const password = $("#li-password").value;
+      const email = $("#li-email").value.trim().toLowerCase();
+      const password = $("#li-password").value;
 
-    try {
-      const r = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ email, password })
-      });
-      if (!r.ok) throw new Error(await r.text());
-      if (!r.ok) {
-        const errTxt = await r.text();
-        throw new Error(errTxt || "Geçersiz bilgiler");
+      try {
+        const r = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ email, password })
+        });
+
+        if (!r.ok) {
+          // API ayrıntılı mesaj döndürüyor olabilir
+          let msg = "Geçersiz bilgiler";
+          try {
+            const err = await r.json();
+            msg = err.detail || msg;
+          } catch {}
+          throw new Error(msg);
+        }
+
+        const data = await r.json();
+        localStorage.setItem("token", data.access_token);
+        localStorage.setItem("tenant_key", data.tenant_key);
+        window.location.href = "/schedule"; // /schedule route’u static/schedule.html'i döndürüyor
+      } catch (err) {
+        setStatus("Giriş hatası: " + (err.message || err), true);
+        alert("Giriş hatası: " + (err.message || err));
       }
-      const data = await r.json();
-      localStorage.setItem("token", data.access_token);
-      localStorage.setItem("tenant_key", data.tenant_key);
-      window.location.href = "/schedule";
-    } catch (err) {
-      alert("Giriş hatası:\n" + err.message);
-      setStatus("Giriş hatası: " + (err.message || err), true);
-    }
-  });
-});
-</script>
+    });
+  })();
+  </script>
 </body>
 </html>
