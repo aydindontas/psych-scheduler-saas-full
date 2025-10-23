@@ -118,36 +118,28 @@ def health():
 # ---------------------------------------------------------------------------
 @app.post("/api/auth/signup")
 async def signup(req: Request, session: Session = Depends(get_session)):
-    try:
-        data = await req.json()
-    except Exception:
-        raise HTTPException(400, "Geçersiz JSON")
+    data = await req.json()
+    email = data["email"].strip().toLower()
+    password = data["password"]
+    name = data.get("clinic", "Klinik")
 
-    email = (data.get("email") or "").strip().lower()
-    password = data.get("password") or ""
-    name = (data.get("clinic") or "Klinik").strip()
-
-    if not email or not password:
-        raise HTTPException(400, "E-posta ve şifre zorunlu")
     if len(password) < 6:
-        raise HTTPException(400, "Şifre en az 6 karakter olmalı")
+        raise HTTPException(status_code=400, detail="Şifre en az 6 karakter olmalı")
 
-    # aynı email varsa yeni tenant açmadan token dönebiliriz (kolay mod)
     existing = session.exec(select(User).where(User.email == email)).first()
     if existing:
-        token = create_access_token(str(existing.id), settings.jwt_secret, settings.jwt_expire_minutes)
+        # Parolayı güncelle (soft reset), token ver
+        existing.password_hash = hash_password(password)
+        session.add(existing); session.commit()
         tenant = session.get(Tenant, existing.tenant_id)
+        token = create_access_token(str(existing.id), settings.jwt_secret, settings.jwt_expire_minutes)
         return {"access_token": token, "tenant_key": tenant.tenant_key}
 
     tenant = Tenant(name=name, tenant_key=secrets.token_urlsafe(6))
-    session.add(tenant)
-    session.commit()
-    session.refresh(tenant)
+    session.add(tenant); session.commit(); session.refresh(tenant)
 
     u = User(tenant_id=tenant.id, email=email, password_hash=hash_password(password), role="admin")
-    session.add(u)
-    session.commit()
-    session.refresh(u)
+    session.add(u); session.commit(); session.refresh(u)
 
     token = create_access_token(str(u.id), settings.jwt_secret, settings.jwt_expire_minutes)
     reschedule_all(session)
@@ -155,19 +147,28 @@ async def signup(req: Request, session: Session = Depends(get_session)):
 
 @app.post("/api/auth/login")
 async def login(req: Request, session: Session = Depends(get_session)):
-    try:
-        data = await req.json()
-    except Exception:
-        raise HTTPException(400, "Geçersiz JSON")
-
-    email = (data.get("email") or "").strip().lower()
-    password = data.get("password") or ""
+    data = await req.json()
+    email = data["email"].strip().lower()
+    password = data["password"]
 
     u = session.exec(select(User).where(User.email == email)).first()
-    if not u or not verify_password(password, u.password_hash):
+    if not u:
         raise HTTPException(401, "Geçersiz bilgiler")
 
-    token = create_access_token(str(u.id), settings.jwt_secret, settings.jwt_expire_minutes)
+    # Bozuk hash’te 500 düşmemek için koruma
+    try:
+        ok = verify_password(password, u.password_hash or "")
+    except Exception:
+        ok = False
+
+    if not ok:
+        # İstersen burada parolayı otomatik resetleyebiliriz:
+        # u.password_hash = hash_password(password)
+        # session.add(u); session.commit()
+        # ok = True
+        raise HTTPException(401, "Geçersiz bilgiler")
+
+    token = create_access_token(subject=str(u.id), secret=settings.jwt_secret, minutes=settings.jwt_expire_minutes)
     reschedule_all(session)
     tenant = session.get(Tenant, u.tenant_id)
     return {"access_token": token, "tenant_key": tenant.tenant_key}
