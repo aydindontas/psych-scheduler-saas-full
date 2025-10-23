@@ -5,23 +5,20 @@ from .settings import load_settings
 
 _settings = load_settings()
 
-# 🧱 /data klasörünü oluştur (Render'da yoksa hata verir)
+# Render için güvenli SQLite yolu
 if _settings.database_url.startswith("sqlite:////"):
-    db_path = _settings.database_url.replace("sqlite:////", "/")
+    db_path = _settings.database_url.replace("sqlite:////", "/opt/render/project/src/")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
-engine = create_engine(_settings.database_url, echo=False, future=True)
+engine = create_engine(_settings.database_url.replace("/data", "/opt/render/project/src/data"), echo=False, future=True)
 
 def init_db():
-    # SQLite için faydalı (opsiyonel)
     if _settings.database_url.startswith("sqlite"):
         with engine.connect() as conn:
             conn.exec_driver_sql("PRAGMA foreign_keys=ON")
 
-    # MODELLERİN YÜKLÜ OLDUĞUNDAN EMİN OLUN
-    from . import models  # <-- User, Tenant, Client, Appointment import edilmiş olacak
-
-    SQLModel.metadata.create_all(engine)  # <-- tablo oluşturur
+    from . import models
+    SQLModel.metadata.create_all(engine)
 
 def get_session():
     return Session(engine)
