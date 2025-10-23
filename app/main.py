@@ -19,7 +19,11 @@ from .scheduler import start_scheduler, schedule_all
 # ----------------- App & Settings -----------------
 settings = load_settings()
 app = FastAPI(title="Psych Scheduler SaaS")
+
+# ⬇⬇⬇ Burası çok önemli
+from .db import init_db
 init_db()
+# ⬆⬆⬆  FastAPI uygulaması oluşturulur oluşturulmaz tabloyu yaratır
 
 # Statik dosyalar
 app.mount("/static", StaticFiles(directory="static"), name="static")
