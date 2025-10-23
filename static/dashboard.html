@@ -126,7 +126,12 @@
     </section>
   </div>
 
-  <script>
+  <script><script>
+  const token = localStorage.getItem("token");
+  if (!token) {
+    window.location.replace("/static/Login.html");
+  }
+</script>
     // ---- yardımcılar
     const $ = (id)=>document.getElementById(id);
     const fmtLocal = (iso)=>{
