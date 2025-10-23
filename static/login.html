@@ -23,30 +23,32 @@
   </div>
 
 <script>
-const API = location.origin + "/api";
-const token = localStorage.getItem("token");
-if(!token){ location.replace("/static/Login.html"); }
+document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("email").value.trim().toLowerCase();
+  const password = document.getElementById("password").value;
 
-const $ = id => document.getElementById(id);
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ email, password })
+    });
 
-async function loadMe(){
-  try{
-    const res = await fetch(API + "/me", { headers:{Authorization:"Bearer "+token} });
-    if(!res.ok){ throw new Error("Yetkisiz"); }
-    const me = await res.json();
-    $("meEmail").textContent = me.email || "-";
-    $("tenantKey").textContent = me.tenant?.tenant_key || "-";
-    $("apiBase").value = API;
-  }catch(e){
-    localStorage.removeItem("token");
-    location.replace("/static/Login.html");
+    if (!res.ok) {
+      const err = await res.json().catch(()=>({detail:"Hata"}));
+      alert("Giriş başarısız: " + (err.detail || res.status));
+      return;
+    }
+
+    const data = await res.json();
+    localStorage.setItem("token", data.access_token);
+    localStorage.setItem("tenant_key", data.tenant_key);
+    window.location.href = "/static/dashboard.html";
+  } catch (e2) {
+    alert("Ağ hatası: " + e2);
   }
-}
-function logout(){
-  localStorage.removeItem("token");
-  location.assign("/static/Login.html");
-}
-loadMe();
+});
 </script>
 </body>
 </html>
