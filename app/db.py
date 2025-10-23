@@ -10,7 +10,8 @@ if _settings.database_url.startswith("sqlite:////"):
     db_path = _settings.database_url.replace("sqlite:////", "/opt/render/project/src/")
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
-engine = create_engine(_settings.database_url.replace("/data", "/opt/render/project/src/data"), echo=False, future=True)
+engine = create_engine(_settings.database_url, echo=False, future=True)
+
 
 def init_db():
     if _settings.database_url.startswith("sqlite"):
