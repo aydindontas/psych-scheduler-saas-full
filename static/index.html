@@ -17,43 +17,61 @@
   </div>
   <button id="go">Giriş yap</button>
 
-  <script>
-    const $ = (id) => document.getElementById(id);
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // Zaten giriş yaptıysa direkt /schedule
+  if (localStorage.getItem("token")) {
+    window.location.href = "/schedule";
+    return;
+  }
 
-    async function post(url, body) {
-      return fetch(url, {
+  const $ = (s) => document.querySelector(s);
+
+  // SIGNUP
+  $("#signup-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = $("#su-email").value.trim().toLowerCase();
+    const password = $("#su-password").value;
+    const clinic = $("#su-clinic")?.value?.trim() || "Klinik";
+
+    try {
+      const r = await fetch("/api/auth/signup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ email, password, clinic })
       });
-    }
-
-    $("go").onclick = async () => {
-      const email = $("email").value.trim().toLowerCase();
-      const password = $("pass").value;
-
-      if (!email || !password) { alert("E-posta ve şifre girin"); return; }
-
-      // 1) login dene
-      let r = await post("/api/auth/login", { email, password });
-
-      // 2) 401 ise aynı bilgilerle signup dene (backend mevcut kullanıcıya da token döndürebiliyor)
-      if (r.status === 401) {
-        r = await post("/api/auth/signup", { email, password, clinic: "Klinik" });
-      }
-
-      if (!r.ok) {
-        const msg = await r.text().catch(()=> "");
-        alert("Giriş/Kayıt başarısız.\n" + msg);
-        return;
-      }
-
-      // 3) token'ı sakla ve /schedule'a git
+      if (!r.ok) throw new Error(await r.text());
       const data = await r.json();
       localStorage.setItem("token", data.access_token);
       localStorage.setItem("tenant_key", data.tenant_key);
-      location.href = "/schedule";
-    };
-  </script>
+      window.location.href = "/schedule";
+    } catch (err) {
+      alert("Kayıt/Giriş hatası:\n" + err.message);
+    }
+  });
+
+  // LOGIN
+  $("#login-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = $("#li-email").value.trim().toLowerCase();
+    const password = $("#li-password").value;
+
+    try {
+      const r = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ email, password })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const data = await r.json();
+      localStorage.setItem("token", data.access_token);
+      localStorage.setItem("tenant_key", data.tenant_key);
+      window.location.href = "/schedule";
+    } catch (err) {
+      alert("Giriş hatası:\n" + err.message);
+    }
+  });
+});
+</script>
 </body>
 </html>
