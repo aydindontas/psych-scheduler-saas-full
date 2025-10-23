@@ -1,136 +1,132 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Randevu Planla • Psych Scheduler</title>
-  <style>
-    body{margin:0;background:#f8fafc;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;color:#0f172a}
-    .wrap{max-width:560px;margin:40px auto;padding:0 16px}
-    .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 8px 30px rgba(2,6,23,.06);padding:20px}
-    h1{margin:0 0 12px 0;font-size:22px;font-weight:800}
-    label{display:block;margin:10px 0 6px}
-    input,select{width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:10px}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .btn{width:100%;margin-top:14px;padding:12px 14px;border:0;border-radius:10px;background:#4f46e5;color:#fff;font-weight:800;cursor:pointer}
-    .muted{color:#64748b;font-size:13px;margin-top:8px}
-    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-    .link{color:#4f46e5;text-decoration:none;font-weight:700}
-    .ok{color:#16a34a}.err{color:#dc2626}
-  </style>
-</head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Randevu Planla</title>
+<link rel="stylesheet" href="/static/style.css">
+
 <body>
-  <div class="wrap">
-    <div class="topbar">
-      <a class="link" href="/static/dashboard.html">← Panel</a>
-      <a class="link" href="#" id="logout">Çıkış</a>
-    </div>
-    <div class="card">
-      <h1>Randevu Planla</h1>
-      <form id="frm" onsubmit="return saveAppt(event)">
-        <label>Danışan Adı (opsiyonel)</label>
-        <input id="name" placeholder="Örn: Ayşe Yılmaz" />
+  <h2>Randevu Planla</h2>
 
-        <label>Telefon (WhatsApp formatında)</label>
-        <input id="phone" placeholder="+90555xxxxxxx" required />
-
-        <div class="row">
-          <div>
-            <label>Tarih</label>
-            <input id="date" type="date" required />
-          </div>
-          <div>
-            <label>Saat</label>
-            <input id="time" type="time" required />
-          </div>
-        </div>
-
-        <div class="row">
-          <div>
-            <label>Süre (dakika)</label>
-            <input id="dur" type="number" min="15" step="5" value="60" />
-          </div>
-          <div>
-            <label>Tür</label>
-            <select id="kind">
-              <option value="online" selected>Online (Zoom)</option>
-              <option value="inperson">Yüz Yüze</option>
-            </select>
-          </div>
-        </div>
-
-        <button class="btn" type="submit">Kaydet</button>
-        <div id="msg" class="muted"></div>
-      </form>
-    </div>
+  <div>
+    <label>Danışan Telefonu (WhatsApp):</label><br>
+    <input id="phone" placeholder="+9053xxxxxxx" />
   </div>
 
-  <script>
-    // Token guard
-    const token = localStorage.getItem("token");
-    if(!token){ window.location.href="/static/Login.html"; }
+  <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+    <div>
+      <label>Tarih</label><br>
+      <input id="date" type="date" />
+    </div>
+    <div>
+      <label>Saat</label><br>
+      <input id="time" type="time" />
+    </div>
+    <div>
+      <label>Süre (dk)</label><br>
+      <input id="duration" type="number" value="60" min="15" step="15" />
+    </div>
+    <button id="create">Randevu Oluştur</button>
+  </div>
 
-    // Çıkış
-    document.getElementById("logout").onclick = (e)=>{
-      e.preventDefault();
-      localStorage.removeItem("token");
-      localStorage.removeItem("tenantKey");
-      window.location.href="/static/Login.html";
+  <hr>
+
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h3>Yaklaşan Randevular</h3>
+    <button id="refresh">Yenile</button>
+  </div>
+  <table border="1" cellpadding="6" cellspacing="0">
+    <thead><tr><th>ID</th><th>Telefon</th><th>Başlangıç</th><th>Bitiş</th><th>Durum</th><th>Kaynak</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="6">Yükleniyor...</td></tr></tbody>
+  </table>
+
+  <p><a id="logout" href="#">Çıkış yap</a></p>
+
+  <script>
+    const token = localStorage.getItem("token");
+    if (!token) location.href = "/";
+
+    const $ = (id) => document.getElementById(id);
+
+    function isoLocal(dateStr, timeStr) {
+      // YYYY-MM-DD + HH:MM → ISO (timezone belirtmeden gönderiyoruz, backend yerel TZ kabul edecek)
+      return `${dateStr}T${timeStr}`;
+    }
+
+    async function api(path, opts={}) {
+      const r = await fetch(path, {
+        ...opts,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token,
+          ...(opts.headers || {})
+        }
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(()=> "");
+        throw new Error(`${r.status} ${r.statusText}\n${t}`);
+      }
+      return r.json();
+    }
+
+    async function loadUpcoming() {
+      try {
+        const data = await api("/api/appointments/upcoming");
+        const tbody = $("rows");
+        if (!data.length) {
+          tbody.innerHTML = `<tr><td colspan="6">Kayıt yok</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = data.map(a => `
+          <tr>
+            <td>${a.id}</td>
+            <td>${a.phone || "-"}</td>
+            <td>${new Date(a.start).toLocaleString()}</td>
+            <td>${new Date(a.end).toLocaleString()}</td>
+            <td>${a.status}</td>
+            <td>${a.source}</td>
+          </tr>
+        `).join("");
+      } catch (e) {
+        $("rows").innerHTML = `<tr><td colspan="6">Hata: ${e.message.replaceAll("<","&lt;")}</td></tr>`;
+      }
+    }
+
+    $("refresh").onclick = loadUpcoming;
+
+    $("create").onclick = async () => {
+      const phone = $("phone").value.trim();
+      const d = $("date").value;
+      const t = $("time").value;
+      const duration = parseInt($("duration").value || "60", 10);
+
+      if (!phone || !d || !t) { alert("Telefon, tarih ve saat gerekli"); return; }
+
+      const body = {
+        phone,
+        // server yerel TZ (ENV’deki Europe/Istanbul) kabul edip UTC’ye çevirecek
+        start: isoLocal(d, t),
+        // end göndermiyoruz → backend duration/slot_minutes ile hesaplıyor
+      };
+
+      try {
+        await api("/api/appointments", { method: "POST", body: JSON.stringify(body) });
+        alert("Randevu oluşturuldu!");
+        loadUpcoming();
+      } catch (e) {
+        alert("Randevu oluşturulamadı:\n" + e.message);
+      }
     };
 
-    // Varsayılan tarih/saat: bugünden +1 gün, 13:00
-    (function preset(){
-      const d = new Date(Date.now()+24*3600*1000);
-      const y = d.toISOString().slice(0,10);
-      document.getElementById("date").value = y;
-      document.getElementById("time").value = "13:00";
-    })();
-
-    async function saveAppt(e){
+    $("logout").onclick = (e) => {
       e.preventDefault();
-      const phone = document.getElementById("phone").value.trim();
-      const date = document.getElementById("date").value;   // YYYY-MM-DD
-      const time = document.getElementById("time").value;   // HH:MM
-      const dur  = parseInt(document.getElementById("dur").value || "60", 10);
+      localStorage.removeItem("token");
+      localStorage.removeItem("tenant_key");
+      location.href = "/";
+    };
 
-      if(!/^\+?\d{10,15}$/.test(phone)){
-        return show("Lütfen telefon numarasını +90… biçiminde girin.", true);
-      }
-      if(!date || !time){
-        return show("Tarih ve saat zorunlu.", true);
-      }
-
-      // datetime-local string: backend yerel TZ kabul edip UTC'ye çevirecek
-      const startStr = `${date}T${time}`;
-
-      // İstersen end gönderme, backend slot_minutes'a göre hesaplar
-      const body = { phone: phone, start: startStr };
-
-      try{
-        const res = await fetch("/api/appointments", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token
-          },
-          body: JSON.stringify(body)
-        });
-        if(!res.ok){
-          const t = await res.text();
-          return show("Hata: " + t, true);
-        }
-        const data = await res.json();
-        show("✅ Randevu oluşturuldu (id: " + data.id + ")", false);
-      }catch(err){
-        show("Sunucuya ulaşılamıyor.", true);
-      }
-    }
-
-    function show(text, isErr){
-      const el = document.getElementById("msg");
-      el.textContent = text;
-      el.className = "muted " + (isErr ? "err" : "ok");
-    }
+    // sayfa açılışında listeyi getir
+    loadUpcoming();
   </script>
 </body>
 </html>
