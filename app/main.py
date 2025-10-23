@@ -18,8 +18,15 @@ from .scheduler import start_scheduler, schedule_all
 
 # ----------------- App & Settings -----------------
 # ----------------- App & Settings -----------------
+from fastapi.staticfiles import StaticFiles
+import os
 settings = load_settings()
 app = FastAPI(title="Psych Scheduler SaaS")
+
+BASE_DIR = os.path.dirname(__file__)
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # ✅ DOĞRUSU: startup event’inde çağır
 from .db import init_db
