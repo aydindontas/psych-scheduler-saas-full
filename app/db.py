@@ -4,6 +4,12 @@ from sqlmodel import SQLModel, create_engine, Session
 from .settings import load_settings
 
 _settings = load_settings()
+
+# 🧱 /data klasörünü oluştur (Render'da yoksa hata verir)
+if _settings.database_url.startswith("sqlite:////"):
+    db_path = _settings.database_url.replace("sqlite:////", "/")
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
 engine = create_engine(_settings.database_url, echo=False, future=True)
 
 def init_db():
