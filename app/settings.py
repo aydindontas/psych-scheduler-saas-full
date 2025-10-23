@@ -38,5 +38,5 @@ def load_settings() -> Settings:
         reminder_24h=int(os.getenv('REMINDER_24H', '1440')),
         reminder_1h=int(os.getenv('REMINDER_1H', '60')),
         zoom_join_url=(os.getenv('ZOOM_JOIN_URL') or '').strip() or None,
-        database_url=os.getenv('DATABASE_URL', 'sqlite:////data.db'),  # 🧱 varsayılan veritabanı yolu
+        database_url=os.getenv('DATABASE_URL', 'sqlite:////data/app.db'),  # 🧱 varsayılan veritabanı yolu
     )
