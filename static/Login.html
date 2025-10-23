@@ -3,83 +3,50 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Giriş / Kayıt</title>
+  <title>Panel</title>
   <link rel="stylesheet" href="/static/style.css"/>
 </head>
 <body>
   <div class="container">
-    <h1>Psych Scheduler</h1>
+    <h1>Hoş geldin</h1>
 
-    <div id="modeText" class="helper">Hesabın yok mu? <span class="link" id="toggle">Kayıt ol</span></div>
+    <p><span class="badge">Tenant</span> <span id="tenantKey">-</span></p>
+    <p><span class="badge">E-posta</span> <span id="meEmail">-</span></p>
 
-    <div class="form">
-      <label>E-posta</label>
-      <input id="email" type="email" placeholder="ornek@domain.com" required/>
-
-      <label>Şifre</label>
-      <input id="password" type="password" placeholder="••••••••" required/>
-
-      <div id="clinicWrap" style="display:none">
-        <label>Klinik/İşyeri Adı</label>
-        <input id="clinic" type="text" placeholder="Örn. ABC Psikoloji"/>
-      </div>
-
-      <div style="margin-top:16px">
-        <button id="submitBtn">Giriş Yap</button>
-      </div>
-
-      <div id="status" class="helper" style="margin-top:10px"></div>
+    <div class="row" style="margin-top:16px">
+      <button onclick="location.assign('/schedule')">Randevu Planla</button>
+      <button style="background:#2a3652" onclick="logout()">Çıkış</button>
     </div>
+
+    <p class="helper" style="margin-top:12px">API Base: <input id="apiBase" readonly></p>
+    <div id="status" class="helper"></div>
   </div>
 
 <script>
-let isSignup = false;
-const $ = id => document.getElementById(id);
 const API = location.origin + "/api";
+const token = localStorage.getItem("token");
+if(!token){ location.replace("/static/Login.html"); }
 
-function setMode(signup){
-  isSignup = signup;
-  $("submitBtn").textContent = signup ? "Kayıt Ol" : "Giriş Yap";
-  $("clinicWrap").style.display = signup ? "block" : "none";
-  $("modeText").innerHTML = signup
-    ? `Hesabın var mı? <span class="link" id="toggle">Giriş yap</span>`
-    : `Hesabın yok mu? <span class="link" id="toggle">Kayıt ol</span>`;
-  $("toggle").onclick = () => setMode(!isSignup);
-}
-setMode(false);
+const $ = id => document.getElementById(id);
 
-$("submitBtn").onclick = async () => {
-  const email = $("email").value.trim().toLowerCase();
-  const password = $("password").value;
-  const clinic = $("clinic").value.trim();
-  $("status").className = "helper"; $("status").textContent = "İşleniyor...";
-
+async function loadMe(){
   try{
-    const url = isSignup ? API + "/auth/signup" : API + "/auth/login";
-    const body = isSignup ? {email, password, clinic} : {email, password};
-    const res = await fetch(url, {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(body)
-    });
-
-    const text = await res.text();
-    let data = {};
-    try{ data = JSON.parse(text); }catch{ throw new Error(text || "Sunucu hatası"); }
-
-    if(!res.ok){
-      throw new Error(data.detail || "İşlem başarısız");
-    }
-
-    localStorage.setItem("token", data.access_token);
-    localStorage.setItem("tenant_key", data.tenant_key || "");
-    $("status").className = "ok"; $("status").textContent = "Giriş başarılı, yönlendiriliyor...";
-    setTimeout(()=>location.assign("/dashboard"), 400);
-  }catch(err){
-    $("status").className = "err";
-    $("status").textContent = "Hata: " + (err.message || "Bilinmeyen hata");
+    const res = await fetch(API + "/me", { headers:{Authorization:"Bearer "+token} });
+    if(!res.ok){ throw new Error("Yetkisiz"); }
+    const me = await res.json();
+    $("meEmail").textContent = me.email || "-";
+    $("tenantKey").textContent = me.tenant?.tenant_key || "-";
+    $("apiBase").value = API;
+  }catch(e){
+    localStorage.removeItem("token");
+    location.replace("/static/Login.html");
   }
-};
+}
+function logout(){
+  localStorage.removeItem("token");
+  location.assign("/static/Login.html");
+}
+loadMe();
 </script>
 </body>
 </html>
