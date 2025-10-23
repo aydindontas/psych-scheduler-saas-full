@@ -6,8 +6,6 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request, Depends, HTTPException, Header, Query
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-
 from sqlmodel import Session, select
 
 from .db import init_db, get_session
@@ -17,6 +15,7 @@ from .auth import hash_password, verify_password, create_access_token
 from .logic import working_slots, busy_from_db, ensure_client
 from .whatsapp import send_whatsapp_text
 from .scheduler import start_scheduler, schedule_all
+
 
 # ---------------------------------------------------------------------------
 # App & Settings
